@@ -868,29 +868,29 @@
 
   function drawDashSky() {
     const sky = ctx.createLinearGradient(0, 0, 0, PLAY_H);
-    sky.addColorStop(0, "#22334f");
-    sky.addColorStop(0.48, "#25706e");
-    sky.addColorStop(0.78, "#73b966");
-    sky.addColorStop(1, "#a7c75f");
+    sky.addColorStop(0, "#10172f");
+    sky.addColorStop(0.42, "#143b52");
+    sky.addColorStop(0.78, "#22605f");
+    sky.addColorStop(1, "#2f7b65");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, PLAY_H);
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     const glow = ctx.createRadialGradient(W * 0.74, 118, 10, W * 0.74, 118, 190);
-    glow.addColorStop(0, "rgba(255, 238, 147, 0.55)");
-    glow.addColorStop(0.42, "rgba(88, 235, 194, 0.18)");
-    glow.addColorStop(1, "rgba(88, 235, 194, 0)");
+    glow.addColorStop(0, "rgba(255, 209, 102, 0.52)");
+    glow.addColorStop(0.42, "rgba(56, 189, 248, 0.2)");
+    glow.addColorStop(1, "rgba(56, 189, 248, 0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, PLAY_H);
 
-    ctx.strokeStyle = "rgba(255, 239, 166, 0.18)";
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.18)";
     ctx.lineWidth = 12;
     ctx.beginPath();
     ctx.moveTo(-20, 120 + Math.sin(state.time * 1.7) * 10);
     ctx.bezierCurveTo(230, 52, 450, 176, W + 20, 92);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(111, 243, 204, 0.18)";
+    ctx.strokeStyle = "rgba(34, 211, 238, 0.2)";
     ctx.lineWidth = 9;
     ctx.beginPath();
     ctx.moveTo(-40, 212);
@@ -898,7 +898,7 @@
     ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = "rgba(24, 49, 52, 0.3)";
+    ctx.fillStyle = "rgba(8, 25, 35, 0.44)";
     for (let x = -80; x < W + 90; x += 118) {
       const y = 338 + Math.sin(x * 0.016 + state.time * 0.7) * 6;
       drawHill(x, y, 190, 84);
@@ -907,7 +907,7 @@
 
   function drawDashBackdrop() {
     ctx.save();
-    ctx.strokeStyle = "rgba(214, 255, 234, 0.16)";
+    ctx.strokeStyle = "rgba(125, 211, 252, 0.24)";
     ctx.lineWidth = 2;
     for (let i = 0; i < 12; i += 1) {
       const y = 92 + i * 24;
@@ -919,7 +919,7 @@
     }
 
     const horizon = PLAY_H - 88;
-    ctx.strokeStyle = "rgba(255, 244, 214, 0.14)";
+    ctx.strokeStyle = "rgba(226, 232, 240, 0.18)";
     ctx.lineWidth = 1.5;
     for (let y = horizon; y < PLAY_H; y += 18) {
       const spread = (y - horizon) * 4;
@@ -950,7 +950,7 @@
       ctx.save();
       ctx.translate(cloud.x, cloud.y);
       ctx.scale(cloud.s, cloud.s);
-      ctx.fillStyle = state.phase === "dash" ? "rgba(213, 255, 238, 0.5)" : "rgba(255, 247, 223, 0.72)";
+      ctx.fillStyle = state.phase === "dash" ? "rgba(226, 232, 240, 0.34)" : "rgba(255, 247, 223, 0.72)";
       ctx.beginPath();
       ctx.arc(-34, 10, 22, 0, TWO_PI);
       ctx.arc(-8, 2, 28, 0, TWO_PI);
@@ -1011,14 +1011,14 @@
     const y = obstacle.type === "orb" ? obstacle.y : obstacle.y - 66 * sign;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.shadowColor = "rgba(255, 232, 139, 0.55)";
-    ctx.shadowBlur = 12;
-    ctx.strokeStyle = "#ffe88b";
-    ctx.lineWidth = 3;
+    ctx.shadowColor = "rgba(250, 204, 21, 0.85)";
+    ctx.shadowBlur = 16;
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.arc(cueX, y, 15 + Math.sin(state.time * 10 + obstacle.pulse) * 2, 0, TWO_PI);
     ctx.stroke();
-    ctx.fillStyle = "#ffe88b";
+    ctx.fillStyle = "#facc15";
     ctx.beginPath();
     ctx.moveTo(cueX - 9, y + 2 * sign);
     ctx.lineTo(cueX, y - 10 * sign);
@@ -1054,12 +1054,12 @@
     roundedRect(x + 8, y - 25, obstacle.w - 16, 27, 7);
     ctx.fill();
 
-    ctx.shadowColor = "rgba(255, 101, 124, 0.42)";
-    ctx.shadowBlur = 14;
+    ctx.shadowColor = "rgba(244, 63, 94, 0.76)";
+    ctx.shadowBlur = 18;
     const grad = ctx.createLinearGradient(x, y - obstacle.h, x, y);
-    grad.addColorStop(0, "#ff8690");
-    grad.addColorStop(0.5, "#d83c58");
-    grad.addColorStop(1, "#7b243f");
+    grad.addColorStop(0, "#fb7185");
+    grad.addColorStop(0.5, "#e11d48");
+    grad.addColorStop(1, "#881337");
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h);
@@ -1077,14 +1077,14 @@
     ctx.arc(x + obstacle.w * 0.37, y - obstacle.h * 0.14, 3, 0, TWO_PI);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255, 239, 188, 0.58)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.76)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h + 8);
     ctx.lineTo(x + obstacle.w * 0.48, y - 7);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(29, 29, 33, 0.34)";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.78)";
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h);
     ctx.bezierCurveTo(x + obstacle.w * 0.88, y - 25, x + obstacle.w + 3, y - 6, x + obstacle.w, y);
@@ -1102,19 +1102,19 @@
     ctx.translate(x, y);
     ctx.scale(pulse, pulse);
     ctx.globalAlpha = obstacle.used ? 0.35 : 1;
-    ctx.shadowColor = "rgba(255, 232, 139, 0.68)";
-    ctx.shadowBlur = 18;
-    ctx.strokeStyle = "#ffe88b";
-    ctx.lineWidth = 5;
+    ctx.shadowColor = "rgba(250, 204, 21, 0.9)";
+    ctx.shadowBlur = 20;
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.arc(0, 0, 18, 0, TWO_PI);
     ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#5feec1";
+    ctx.fillStyle = "#22c55e";
     ctx.beginPath();
     ctx.arc(0, 0, 8, 0, TWO_PI);
     ctx.fill();
-    ctx.fillStyle = "#17303a";
+    ctx.fillStyle = "#0f172a";
     ctx.beginPath();
     ctx.moveTo(-5, 2);
     ctx.lineTo(0, -7);
@@ -1131,19 +1131,19 @@
     const h = obstacle.h;
     const pulse = 0.5 + Math.sin(state.time * 7 + obstacle.pulse) * 0.5;
     ctx.save();
-    ctx.shadowColor = "rgba(95, 238, 193, 0.6)";
+    ctx.shadowColor = "rgba(56, 189, 248, 0.72)";
     ctx.shadowBlur = 16 + pulse * 10;
     const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, "#5feec1");
-    grad.addColorStop(0.46, "#ffe88b");
-    grad.addColorStop(1, "#ff6f8b");
+    grad.addColorStop(0, "#38bdf8");
+    grad.addColorStop(0.5, "#facc15");
+    grad.addColorStop(1, "#fb7185");
     ctx.strokeStyle = grad;
     ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.ellipse(x + w * 0.5, y + h * 0.5, w * 0.42, h * 0.5, 0, 0, TWO_PI);
     ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(255, 244, 214, 0.8)";
+    ctx.strokeStyle = "rgba(248, 250, 252, 0.9)";
     ctx.lineWidth = 2;
     for (let i = 0; i < 3; i += 1) {
       const yy = y + h * (0.28 + i * 0.22);
@@ -1233,18 +1233,18 @@
     ctx.ellipse(x + obstacle.w * 0.5, baseY + 3, obstacle.w * 0.55, 8, 0, 0, TWO_PI);
     ctx.fill();
 
-    ctx.shadowColor = "rgba(118, 255, 192, 0.58)";
-    ctx.shadowBlur = 12;
+    ctx.shadowColor = "rgba(34, 197, 94, 0.82)";
+    ctx.shadowBlur = 16;
     const pad = ctx.createLinearGradient(x, y - 2, x, y + obstacle.h + 8);
-    pad.addColorStop(0, "#fff088");
-    pad.addColorStop(0.52, "#69ec9c");
-    pad.addColorStop(1, "#2a9b84");
+    pad.addColorStop(0, "#fef08a");
+    pad.addColorStop(0.5, "#22c55e");
+    pad.addColorStop(1, "#047857");
     ctx.fillStyle = pad;
     roundedRect(x, y, obstacle.w, obstacle.h, 7);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    ctx.strokeStyle = "#fff4d6";
+    ctx.strokeStyle = "#f8fafc";
     ctx.lineWidth = 4;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -1256,7 +1256,7 @@
     ctx.stroke();
     ctx.lineCap = "butt";
 
-    ctx.fillStyle = "#d94259";
+    ctx.fillStyle = "#e11d48";
     ctx.beginPath();
     ctx.ellipse(x + obstacle.w * 0.5, y - 19, 18, 10, 0, Math.PI, TWO_PI);
     ctx.lineTo(x + obstacle.w * 0.5 + 14, y - 17);
@@ -1436,15 +1436,15 @@
 
   function drawDashGround() {
     const ground = ctx.createLinearGradient(0, PLAY_H, 0, H);
-    ground.addColorStop(0, "#24483f");
-    ground.addColorStop(0.42, "#182d34");
-    ground.addColorStop(1, "#10181f");
+    ground.addColorStop(0, "#111827");
+    ground.addColorStop(0.46, "#0f172a");
+    ground.addColorStop(1, "#050816");
     ctx.fillStyle = ground;
     ctx.fillRect(0, PLAY_H, W, GROUND_H);
 
-    ctx.fillStyle = "rgba(255, 232, 139, 0.72)";
+    ctx.fillStyle = "rgba(250, 204, 21, 0.9)";
     ctx.fillRect(0, PLAY_H, W, 5);
-    ctx.fillStyle = "rgba(95, 239, 191, 0.22)";
+    ctx.fillStyle = "rgba(56, 189, 248, 0.34)";
     for (let x = -20 - ((state.time * state.speed * 0.45) % 74); x < W + 80; x += 74) {
       roundedRect(x, PLAY_H + 20, 48, 9, 4);
       ctx.fill();
@@ -1456,10 +1456,10 @@
     const bottom = PLAY_H + 8;
     ctx.save();
     const track = ctx.createLinearGradient(0, top, 0, bottom);
-    track.addColorStop(0, "rgba(29, 59, 61, 0.15)");
-    track.addColorStop(0.28, "rgba(30, 71, 67, 0.9)");
-    track.addColorStop(0.72, "rgba(17, 37, 44, 0.96)");
-    track.addColorStop(1, "rgba(12, 22, 29, 1)");
+    track.addColorStop(0, "rgba(15, 23, 42, 0.25)");
+    track.addColorStop(0.28, "rgba(15, 23, 42, 0.92)");
+    track.addColorStop(0.72, "rgba(2, 6, 23, 0.98)");
+    track.addColorStop(1, "rgba(2, 6, 23, 1)");
     ctx.fillStyle = track;
     ctx.beginPath();
     ctx.moveTo(0, top + 22);
@@ -1469,13 +1469,13 @@
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(108, 246, 201, 0.72)";
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.95)";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(0, top + 22);
     ctx.lineTo(W, top);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(255, 232, 139, 0.78)";
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.94)";
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(0, dashGroundY() + 3);
@@ -1485,7 +1485,7 @@
     const offset = (state.time * state.speed) % 68;
     for (let x = -80 - offset; x < W + 100; x += 68) {
       const alpha = 0.28 + ((Math.floor((x + offset) / 68) % 2) * 0.16);
-      ctx.fillStyle = `rgba(255, 244, 214, ${alpha})`;
+      ctx.fillStyle = `rgba(148, 163, 184, ${alpha})`;
       ctx.beginPath();
       ctx.moveTo(x, top + 38);
       ctx.lineTo(x + 42, top + 34);
@@ -1499,9 +1499,9 @@
       const p = state.player;
       const radius = 130 * state.dashFlash + 34;
       const glow = ctx.createRadialGradient(p.x, p.y, 6, p.x, p.y, radius);
-      glow.addColorStop(0, `rgba(255, 236, 126, ${0.45 * state.dashFlash})`);
-      glow.addColorStop(0.42, `rgba(95, 239, 191, ${0.24 * state.dashFlash})`);
-      glow.addColorStop(1, "rgba(95, 239, 191, 0)");
+      glow.addColorStop(0, `rgba(250, 204, 21, ${0.45 * state.dashFlash})`);
+      glow.addColorStop(0.42, `rgba(56, 189, 248, ${0.24 * state.dashFlash})`);
+      glow.addColorStop(1, "rgba(56, 189, 248, 0)");
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, W, H);
     }
@@ -1513,27 +1513,37 @@
       ctx.save();
       const top = platform.y;
       const surface = platform.gravity === 1 ? platform.y : platform.y + platform.h;
-      ctx.fillStyle = "rgba(8, 18, 22, 0.26)";
-      roundedRect(platform.x + 5, platform.y + 7 * platform.gravity, platform.w, platform.h, 5);
+      ctx.shadowColor = "rgba(56, 189, 248, 0.35)";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = "rgba(2, 6, 23, 0.52)";
+      roundedRect(platform.x + 6, platform.y + 8 * platform.gravity, platform.w, platform.h, 5);
       ctx.fill();
+      ctx.shadowBlur = 0;
 
       const grad = ctx.createLinearGradient(platform.x, top, platform.x, top + platform.h);
-      grad.addColorStop(0, platform.gravity === 1 ? "#ffe88b" : "#203747");
-      grad.addColorStop(0.18, "#5feec1");
-      grad.addColorStop(0.56, "#244b51");
-      grad.addColorStop(1, platform.gravity === 1 ? "#15232c" : "#ffe88b");
+      grad.addColorStop(0, platform.gravity === 1 ? "#e0f2fe" : "#0f172a");
+      grad.addColorStop(0.18, "#38bdf8");
+      grad.addColorStop(0.56, "#1e3a5f");
+      grad.addColorStop(1, platform.gravity === 1 ? "#0f172a" : "#e0f2fe");
       ctx.fillStyle = grad;
       roundedRect(platform.x, platform.y, platform.w, platform.h, 4);
       ctx.fill();
 
-      ctx.strokeStyle = "rgba(255, 244, 214, 0.72)";
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 3.5;
       ctx.beginPath();
       ctx.moveTo(platform.x, surface);
       ctx.lineTo(platform.x + platform.w, surface);
       ctx.stroke();
 
-      ctx.fillStyle = "rgba(255, 244, 214, 0.16)";
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.52)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(platform.x, surface - 7 * platform.gravity);
+      ctx.lineTo(platform.x + platform.w, surface - 7 * platform.gravity);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(191, 219, 254, 0.2)";
       const tileOffset = (state.time * state.speed * 0.22 + platform.pulse * 12) % 38;
       for (let x = platform.x - tileOffset; x < platform.x + platform.w; x += 38) {
         ctx.fillRect(x, platform.y + 6, 18, Math.max(4, platform.h - 12));
