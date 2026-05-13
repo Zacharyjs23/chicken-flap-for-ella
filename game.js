@@ -15,6 +15,7 @@
   const keysDown = new Set();
   const once = new Set();
   let audioCtx = null;
+  let pointerHeld = false;
 
   const state = {
     mode: "title",
@@ -34,6 +35,7 @@
     dashTrailTimer: 0,
     dashGravitySign: 1,
     dashBuildGravity: 1,
+    lastGapCenter: PLAY_H * 0.5,
     lastFlapLevel: 1,
     lastDashLevel: 1,
     message: "",
@@ -93,7 +95,7 @@
     state.time = 0;
     state.score = useCheckpoint ? DASH_START_SCORE : 0;
     state.seed = useCheckpoint ? 5017 : 17;
-    state.speed = useCheckpoint ? dashSpeed() : 185;
+    state.speed = useCheckpoint ? dashSpeed() : 168;
     state.spawnTimer = useCheckpoint ? 0 : 0.45;
     state.shake = 0;
     state.dashFlash = useCheckpoint ? 0.9 : 0;
@@ -104,6 +106,7 @@
     state.dashTrailTimer = 0;
     state.dashGravitySign = 1;
     state.dashBuildGravity = 1;
+    state.lastGapCenter = PLAY_H * 0.5;
     state.lastFlapLevel = 1;
     state.lastDashLevel = 1;
     state.message = useCheckpoint ? "Checkpoint 50" : "";
@@ -153,27 +156,27 @@
   }
 
   function scrollSpeed() {
-    return Math.min(350, 185 + state.score * 5.4);
+    return Math.min(324, 168 + state.score * 3.7);
   }
 
   function gravity() {
-    return Math.min(1030, 850 + state.score * 7);
+    return Math.min(930, 730 + state.score * 4.2);
   }
 
   function gapHeight() {
-    return clamp(248 - state.score * 3.2, 150, 248);
+    return clamp(292 - state.score * 2.0, 190, 292);
   }
 
   function obstacleSpacing() {
-    return clamp(365 - state.score * 6.4, 245, 365);
+    return clamp(430 - state.score * 4.1, 292, 430);
   }
 
   function gapForgiveness() {
-    return clamp(38 - state.score * 0.5, 20, 38);
+    return clamp(68 - state.score * 0.45, 38, 68);
   }
 
   function obstacleWobbleY(obstacle) {
-    return difficultyLevel() >= 4 ? Math.sin(obstacle.wobble) * Math.min(22, (difficultyLevel() - 3) * 3.8) : 0;
+    return difficultyLevel() >= 5 ? Math.sin(obstacle.wobble) * Math.min(15, (difficultyLevel() - 4) * 3.2) : 0;
   }
 
   function dashGroundY() {
@@ -185,15 +188,15 @@
   }
 
   function dashSpeed() {
-    return Math.min(486, 318 + Math.max(0, state.score - DASH_START_SCORE) * 4.1);
+    return Math.min(440, 286 + Math.max(0, state.score - DASH_START_SCORE) * 2.9);
   }
 
   function dashGravity() {
-    return 1840;
+    return 1710;
   }
 
   function dashJumpVelocity() {
-    return -670;
+    return -646;
   }
 
   function dashLevel() {
@@ -220,7 +223,7 @@
   }
 
   function applyFlap() {
-    state.player.vy = -320;
+    state.player.vy = Math.min(state.player.vy, -302);
     state.player.flapPulse = 0.2;
     addFeathers(state.player.x - 12, state.player.y + 10, 7, 100);
     addHeart(state.player.x - 26, state.player.y - 18);
@@ -229,7 +232,7 @@
 
   function jumpDash() {
     if (triggerDashOrb()) return;
-    state.dashJumpBuffer = 0.14;
+    state.dashJumpBuffer = 0.22;
     tryDashJump();
   }
 
@@ -239,9 +242,9 @@
       if (obstacle.type !== "orb" || obstacle.used) continue;
       const dx = player.x - obstacle.x;
       const dy = player.y - obstacle.y;
-      if (Math.hypot(dx, dy) > 42) continue;
+      if (Math.hypot(dx, dy) > 54) continue;
       obstacle.used = true;
-      player.vy = -760 * state.dashGravitySign;
+      player.vy = -725 * state.dashGravitySign;
       player.onGround = false;
       state.dashJumpBuffer = 0;
       state.dashCoyote = 0;
@@ -274,11 +277,21 @@
 
   function spawnObstacle(forceX) {
     const gapH = gapHeight();
-    const gapY = 68 + seededRandom() * (PLAY_H - gapH - 96);
-    const hasBonus = seededRandom() > 0.58 && difficultyLevel() < 8;
+    const minCenter = 74 + gapH * 0.5;
+    const maxCenter = PLAY_H - 76 - gapH * 0.5;
+    const previousCenter = state.lastGapCenter || PLAY_H * 0.5;
+    const maxStep = clamp(96 - state.score * 0.8, 58, 96);
+    let center = previousCenter + (seededRandom() - 0.5) * maxStep * 2;
+    center = clamp(center, minCenter, maxCenter);
+    if (Math.abs(center - previousCenter) < 24 && state.obstacles.length > 0) {
+      center = clamp(center + (seededRandom() > 0.5 ? 1 : -1) * (28 + seededRandom() * 32), minCenter, maxCenter);
+    }
+    state.lastGapCenter = center;
+    const gapY = center - gapH * 0.5;
+    const hasBonus = seededRandom() > 0.62 && difficultyLevel() < 8;
     state.obstacles.push({
       x: forceX ?? W + 64,
-      w: Math.min(108, 86 + Math.floor(state.score / 8) * 3),
+      w: Math.min(104, 78 + Math.floor(state.score / 8) * 3),
       gapY,
       gapH,
       passed: false,
@@ -286,8 +299,8 @@
       wobble: seededRandom() * TWO_PI,
       bonus: hasBonus
         ? {
-            x: (forceX ?? W + 64) + 43,
-            y: gapY + gapH * 0.5,
+            x: (forceX ?? W + 64) + 39,
+            y: center,
             r: 11,
             collected: false,
           }
@@ -313,7 +326,7 @@
     state.dashPlatforms.length = 0;
     state.dashSpawnX = W + 180;
     state.dashJumpBuffer = 0;
-    state.dashCoyote = 0.12;
+    state.dashCoyote = 0.16;
     state.dashStreak = 0;
     state.dashPatternIndex = 0;
     state.dashTrailTimer = 0;
@@ -326,8 +339,8 @@
     addHeart(state.player.x - 26, state.player.y - 28);
     addPopup(options.fromCheckpoint ? "CHECKPOINT 50" : "CHICKEN DASH", state.player.x + 62, state.player.y - 44, "#facc15", 24, 1.1);
     playSound(options.fromCheckpoint ? "checkpoint" : "dash");
-    spawnDashPattern(W + 520);
-    spawnDashPattern(W + 920);
+    spawnDashPattern(W + 460);
+    while (state.dashSpawnX < W + 1220) spawnDashPattern();
   }
 
   function spawnDashPattern(forceX) {
@@ -335,79 +348,78 @@
     const level = dashLevel();
     const gravity = state.dashBuildGravity;
     const lane = dashSurfaceY(gravity);
-    const warmup = state.dashPatternIndex < 4;
+    const scripted = ["runway", "single", "single", "step", "single", "double", "step", "pad-hop", "single", "orb-gap", "stairs", "gap-hop"];
     const pools = [
-      ["single", "gap-hop", "step", "pad-hop"],
-      ["single", "gap-hop", "step", "orb-gap", "double"],
-      ["double", "step", "block-spike", "pad-hop", "orb-gap", "stairs"],
-      ["double", "stairs", "block-spike", "pad-hop", "orb-gap", "portal-flip"],
+      ["single", "gap-hop", "step"],
+      ["single", "gap-hop", "step", "double", "pad-hop"],
+      ["double", "step", "pad-hop", "orb-gap", "stairs"],
+      ["double", "stairs", "pad-hop", "orb-gap", "portal-flip"],
     ];
-    const pool = warmup ? ["single", "gap-hop"] : pools[Math.min(pools.length - 1, Math.floor((level - 1) / 2))];
-    const choice = pool[(state.dashPatternIndex + Math.floor(seededRandom() * pool.length)) % pool.length];
+    const pool = pools[Math.min(pools.length - 1, Math.floor((level - 1) / 2))];
+    const choice =
+      state.dashPatternIndex < scripted.length
+        ? scripted[state.dashPatternIndex]
+        : pool[(state.dashPatternIndex + Math.floor(seededRandom() * pool.length)) % pool.length];
     state.dashPatternIndex += 1;
 
-    if (choice === "single") {
-      addDashPlatform(x, lane, 330, 34, gravity);
-      addDashObstacle("spike", x + 154, lane, 34, 43, gravity);
-      state.dashSpawnX = x + 320 - level * 8;
+    if (choice === "runway") {
+      addDashPlatform(x, lane, 520, 34, gravity);
+      state.dashSpawnX = x + 500;
+    } else if (choice === "single") {
+      addDashPlatform(x, lane, 430, 34, gravity);
+      addDashObstacle("spike", x + 250, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 438 - level * 5;
     } else if (choice === "double") {
-      addDashPlatform(x, lane, 380, 34, gravity);
-      addDashObstacle("spike", x + 128, lane, 34, 43, gravity);
-      addDashObstacle("spike", x + 168, lane, 34, 43, gravity);
-      state.dashSpawnX = x + 382 - level * 9;
+      addDashPlatform(x, lane, 520, 34, gravity);
+      addDashObstacle("spike", x + 270, lane, 34, 43, gravity);
+      addDashObstacle("spike", x + 314, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 520 - level * 5;
     } else if (choice === "step") {
-      const high = lane - 76 * gravity;
-      addDashPlatform(x, lane, 160, 34, gravity);
-      addDashPlatform(x + 205, high, 210, 34, gravity);
-      addDashObstacle("spike", x + 305, high, 34, 43, gravity);
-      state.dashSpawnX = x + 430 - level * 8;
-    } else if (choice === "block-spike") {
-      addDashPlatform(x, lane, 460, 34, gravity);
-      addDashPlatform(x + 118, lane - 66 * gravity, 82, 34, gravity);
-      addDashObstacle("spike", x + 254, lane, 34, 43, gravity);
-      state.dashSpawnX = x + 455 - level * 10;
+      const high = lane - 78 * gravity;
+      addDashPlatform(x, lane, 1040, 34, gravity);
+      addDashPlatform(x + 350, high, 295, 34, gravity);
+      addDashObstacle("spike", x + 840, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 1030 - level * 5;
     } else if (choice === "pad-hop") {
-      const high = lane - 112 * gravity;
-      addDashPlatform(x, lane, 160, 34, gravity);
-      addDashObstacle("pad", x + 62, lane, 58, 12, gravity);
-      addDashPlatform(x + 250, high, 240, 34, gravity);
-      addDashObstacle("spike", x + 378, high, 34, 43, gravity);
-      state.dashSpawnX = x + 510 - level * 10;
+      const high = lane - 104 * gravity;
+      addDashPlatform(x, lane, 1220, 34, gravity);
+      addDashObstacle("pad", x + 168, lane, 62, 12, gravity);
+      addDashPlatform(x + 455, high, 320, 34, gravity);
+      addDashObstacle("spike", x + 1006, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 1200 - level * 5;
     } else if (choice === "orb-gap") {
-      addDashPlatform(x, lane, 150, 34, gravity);
-      addDashObstacle("orb", x + 222, lane - 118 * gravity, 34, 34, gravity);
-      addDashPlatform(x + 330, lane, 300, 34, gravity);
-      addDashObstacle("spike", x + 482, lane, 34, 43, gravity);
-      state.dashSpawnX = x + 620 - level * 9;
+      addDashPlatform(x, lane, 1000, 34, gravity);
+      addDashObstacle("orb", x + 405, lane - 112 * gravity, 34, 34, gravity);
+      addDashObstacle("spike", x + 775, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 995 - level * 5;
     } else if (choice === "stairs") {
-      const mid = lane - 66 * gravity;
-      const high = lane - 126 * gravity;
-      addDashPlatform(x, lane, 150, 34, gravity);
-      addDashPlatform(x + 190, mid, 154, 34, gravity);
-      addDashPlatform(x + 380, high, 190, 34, gravity);
-      addDashObstacle("spike", x + 456, high, 34, 43, gravity);
-      state.dashSpawnX = x + 585 - level * 9;
+      const mid = lane - 62 * gravity;
+      const high = lane - 120 * gravity;
+      addDashPlatform(x, lane, 1400, 34, gravity);
+      addDashPlatform(x + 330, mid, 260, 34, gravity);
+      addDashPlatform(x + 665, high, 300, 34, gravity);
+      addDashObstacle("spike", x + 1165, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 1390 - level * 5;
     } else if (choice === "gap-hop") {
-      addDashPlatform(x, lane, 170, 34, gravity);
-      addDashPlatform(x + 305, lane, 260, 34, gravity);
-      addDashObstacle("spike", x + 420, lane, 34, 43, gravity);
-      state.dashSpawnX = x + 565 - level * 9;
+      addDashPlatform(x, lane, level < 4 ? 860 : 300, 34, gravity);
+      if (level >= 4) addDashPlatform(x + 425, lane, 430, 34, gravity);
+      addDashObstacle("spike", x + 620, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 850 - level * 5;
     } else if (choice === "portal-flip") {
-      addDashPlatform(x, lane, 210, 34, gravity);
-      addDashObstacle("portal", x + 248, lane + (gravity === 1 ? -128 : 12), 54, 116, gravity);
+      addDashPlatform(x, lane, 340, 34, gravity);
+      addDashObstacle("portal", x + 430, lane + (gravity === 1 ? -132 : 16), 56, 116, gravity);
       state.dashBuildGravity *= -1;
       const nextGravity = state.dashBuildGravity;
       const nextLane = dashSurfaceY(nextGravity);
-      addDashPlatform(x + 360, nextLane, 460, 34, nextGravity);
-      addDashObstacle("spike", x + 565, nextLane, 34, 43, nextGravity);
-      state.dashSpawnX = x + 790 - level * 10;
+      addDashPlatform(x + 590, nextLane, 560, 34, nextGravity);
+      addDashObstacle("spike", x + 840, nextLane, 34, 43, nextGravity);
+      state.dashSpawnX = x + 1130 - level * 5;
     } else {
-      addDashPlatform(x, lane, 380, 34, gravity);
-      addDashObstacle("spike", x + 120, lane, 34, 43, gravity);
-      addDashObstacle("spike", x + 252, lane, 34, 43, gravity);
-      state.dashSpawnX = x + 430 - level * 9;
+      addDashPlatform(x, lane, 440, 34, gravity);
+      addDashObstacle("spike", x + 250, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 440 - level * 5;
     }
-    state.dashSpawnX = Math.max(x + 280, state.dashSpawnX + seededRandom() * 34);
+    state.dashSpawnX = Math.max(x + 390, state.dashSpawnX + seededRandom() * 24);
   }
 
   function dashSurfaceY(gravity) {
@@ -558,12 +570,13 @@
     checkDashCollisions();
 
     if (player.onGround) {
-      state.dashCoyote = 0.1;
+      state.dashCoyote = 0.14;
       if (!wasGrounded) addLandingDust(player.x - 8, player.y + player.r * state.dashGravitySign);
     } else {
       state.dashCoyote = Math.max(0, state.dashCoyote - dt);
     }
-    if (state.dashJumpBuffer > 0) tryDashJump();
+    const wantsDashJump = state.dashJumpBuffer > 0 || dashHoldActive();
+    if (wantsDashJump && !triggerDashOrb()) tryDashJump();
 
     player.angle = player.onGround
       ? Math.sin(state.time * 18) * 0.04
@@ -761,7 +774,7 @@
     if (player.y + player.r > PLAY_H) crash("Grounded.");
 
     for (const obstacle of state.obstacles) {
-      const hitR = player.r * 0.38;
+      const hitR = player.r * 0.28;
       const gapPadding = gapForgiveness();
       const currentGapY = obstacle.gapY + obstacleWobbleY(obstacle);
       const topRect = { x: obstacle.x, y: 0, w: obstacle.w, h: Math.max(0, currentGapY - gapPadding) };
@@ -798,10 +811,10 @@
   function checkDashCollisions() {
     const player = state.player;
     const body = {
-      x: player.x - 15,
-      y: player.y - 16,
-      w: 31,
-      h: 32,
+      x: player.x - 13,
+      y: player.y - 14,
+      w: 27,
+      h: 28,
     };
 
     for (const obstacle of state.dashObstacles) {
@@ -826,8 +839,8 @@
       if (obstacle.type === "spike") {
         const spikeHit =
           obstacle.gravity === 1
-            ? { x: obstacle.x + 10, y: obstacle.y - obstacle.h + 17, w: obstacle.w - 20, h: obstacle.h - 20 }
-            : { x: obstacle.x + 10, y: obstacle.y + 3, w: obstacle.w - 20, h: obstacle.h - 20 };
+            ? { x: obstacle.x + 12, y: obstacle.y - obstacle.h + 22, w: obstacle.w - 24, h: obstacle.h - 25 }
+            : { x: obstacle.x + 12, y: obstacle.y + 4, w: obstacle.w - 24, h: obstacle.h - 25 };
         if (rectsOverlap(body, spikeHit)) {
           crash("Dash spike.");
           return;
@@ -857,6 +870,10 @@
     state.lastFlapLevel = level;
     addPopup(`LEVEL ${level}`, W / 2, 104, "#9ee68c", 24, 0.95);
     playSound("checkpoint");
+  }
+
+  function dashHoldActive() {
+    return pointerHeld || keysDown.has(" ") || keysDown.has("arrowup") || keysDown.has("w");
   }
 
   function maybeShowDashLevelUp() {
@@ -1960,7 +1977,7 @@
     ctx.font = "700 12px Inter, system-ui, sans-serif";
     ctx.fillText(
       state.phase === "dash"
-        ? `Checkpoint 50   Streak ${state.dashStreak}   M ${state.muted ? "sound off" : "sound on"}`
+        ? `Hold/tap to jump   Streak ${state.dashStreak}   M ${state.muted ? "sound off" : "sound on"}`
         : `Space / click to flap   P pause   R restart   M ${state.muted ? "sound off" : "sound on"}`,
       W - 26,
       43,
@@ -2228,8 +2245,10 @@
       dashStreak: state.dashStreak,
       dashJumpBuffer: Number(state.dashJumpBuffer.toFixed(2)),
       dashCoyote: Number(state.dashCoyote.toFixed(2)),
+      dashJumpHeld: dashHoldActive(),
       dashGravity: state.dashGravitySign === 1 ? "floor" : "ceiling",
       speed: Math.round(state.speed),
+      lastGapCenter: Math.round(state.lastGapCenter),
       gapForgiveness: Number(gapForgiveness().toFixed(1)),
       obstacleSpacing: Math.round(obstacleSpacing()),
       player: {
@@ -2292,8 +2311,14 @@
 
   function onPointerDown(event) {
     event.preventDefault();
+    pointerHeld = true;
     canvas.focus();
     flap();
+  }
+
+  function onPointerUp(event) {
+    event.preventDefault();
+    pointerHeld = false;
   }
 
   function onKeyDown(event) {
@@ -2319,6 +2344,9 @@
   }
 
   canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
+  canvas.addEventListener("pointerleave", onPointerUp);
   canvas.addEventListener("contextmenu", (event) => event.preventDefault());
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
