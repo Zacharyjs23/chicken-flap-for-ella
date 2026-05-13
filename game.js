@@ -8,6 +8,7 @@
   const H = 540;
   const GROUND_H = 76;
   const PLAY_H = H - GROUND_H;
+  const DASH_START_SCORE = 50;
   const TITLE = "Chicken Flap - For My Sexy Girlfriend Ella";
   const TWO_PI = Math.PI * 2;
 
@@ -16,6 +17,7 @@
 
   const state = {
     mode: "title",
+    phase: "flap",
     time: 0,
     score: 0,
     best: readBestScore(),
@@ -26,6 +28,8 @@
     message: "",
     player: makePlayer(),
     obstacles: [],
+    dashObstacles: [],
+    dashSpawnX: 0,
     feathers: [],
     hearts: [],
     clouds: [],
@@ -39,6 +43,7 @@
       r: 22,
       angle: 0,
       flapPulse: 0,
+      onGround: false,
       alive: true,
     };
   }
@@ -58,6 +63,7 @@
 
   function resetGame() {
     state.mode = "playing";
+    state.phase = "flap";
     state.time = 0;
     state.score = 0;
     state.seed = 17;
@@ -67,6 +73,8 @@
     state.message = "";
     state.player = makePlayer();
     state.obstacles.length = 0;
+    state.dashObstacles.length = 0;
+    state.dashSpawnX = 0;
     state.feathers.length = 0;
     state.hearts.length = 0;
     state.clouds = makeClouds();
@@ -96,6 +104,7 @@
   }
 
   function difficultyLabel() {
+    if (state.phase === "dash") return "Dash Mode";
     return ["Cozy", "Peppy", "Quick", "Spicy", "Wild", "Turbo", "Chaos", "Legend"][difficultyLevel() - 1];
   }
 
@@ -123,6 +132,18 @@
     return difficultyLevel() >= 4 ? Math.sin(obstacle.wobble) * Math.min(22, (difficultyLevel() - 3) * 3.8) : 0;
   }
 
+  function dashGroundY() {
+    return PLAY_H - 22;
+  }
+
+  function dashSpeed() {
+    return Math.min(520, 340 + (state.score - DASH_START_SCORE) * 5.6);
+  }
+
+  function dashGravity() {
+    return 1720;
+  }
+
   function flap() {
     if (state.mode === "title") {
       resetGame();
@@ -135,7 +156,8 @@
       return;
     }
     if (state.mode !== "playing") return;
-    applyFlap();
+    if (state.phase === "dash") jumpDash();
+    else applyFlap();
   }
 
   function applyFlap() {
@@ -143,6 +165,16 @@
     state.player.flapPulse = 0.2;
     addFeathers(state.player.x - 12, state.player.y + 10, 7, 100);
     addHeart(state.player.x - 26, state.player.y - 18);
+  }
+
+  function jumpDash() {
+    const player = state.player;
+    if (!player.onGround) return;
+    player.vy = -625;
+    player.onGround = false;
+    player.flapPulse = 0.22;
+    addFeathers(player.x - 8, player.y + player.r, 10, 115);
+    addHeart(player.x - 24, player.y - 22);
   }
 
   function spawnObstacle(forceX) {
@@ -166,6 +198,49 @@
           }
         : null,
     });
+  }
+
+  function startDashMode() {
+    if (state.phase === "dash") return;
+    state.phase = "dash";
+    state.message = "Dash mode!";
+    state.obstacles.length = 0;
+    state.dashObstacles.length = 0;
+    state.speed = dashSpeed();
+    state.player.x = 190;
+    state.player.y = dashGroundY() - state.player.r;
+    state.player.vy = 0;
+    state.player.angle = 0;
+    state.player.onGround = true;
+    state.dashSpawnX = W + 180;
+    addFeathers(state.player.x, state.player.y, 36, 210);
+    addHeart(state.player.x - 26, state.player.y - 28);
+    spawnDashPattern(W + 360);
+    spawnDashPattern(W + 690);
+  }
+
+  function spawnDashPattern(forceX) {
+    const x = forceX ?? state.dashSpawnX;
+    const level = Math.min(8, Math.floor((state.score - DASH_START_SCORE) / 6) + 1);
+    const roll = seededRandom();
+    const lane = dashGroundY();
+
+    if (roll < 0.48) {
+      const count = level >= 5 && seededRandom() > 0.55 ? 2 : 1;
+      for (let i = 0; i < count; i += 1) {
+        state.dashObstacles.push({ type: "spike", x: x + i * 34, y: lane, w: 32, h: 42, passed: false });
+      }
+      state.dashSpawnX = x + 235 - level * 9;
+    } else if (roll < 0.78) {
+      state.dashObstacles.push({ type: "block", x, y: lane - 46, w: 48, h: 46, passed: false });
+      if (level >= 4) state.dashObstacles.push({ type: "spike", x: x + 86, y: lane, w: 32, h: 42, passed: false });
+      state.dashSpawnX = x + 275 - level * 10;
+    } else {
+      state.dashObstacles.push({ type: "pad", x, y: lane - 8, w: 50, h: 12, passed: false });
+      state.dashObstacles.push({ type: "spike", x: x + 118, y: lane, w: 32, h: 42, passed: false });
+      state.dashSpawnX = x + 305 - level * 10;
+    }
+    state.dashSpawnX = Math.max(x + 178, state.dashSpawnX + seededRandom() * 42);
   }
 
   function addFeathers(x, y, count, speed) {
@@ -201,11 +276,13 @@
       state.time += dt;
       updateClouds(dt, 26);
       updateFeathers(dt);
+      updateHearts(dt);
       return;
     }
 
     if (state.mode === "paused") {
       updateFeathers(dt);
+      updateHearts(dt);
       return;
     }
 
@@ -214,10 +291,16 @@
       state.shake = Math.max(0, state.shake - dt);
       updateClouds(dt, 26);
       updateFeathers(dt);
+      updateHearts(dt);
       return;
     }
 
     state.time += dt;
+    if (state.phase === "dash") {
+      updateDashMode(dt);
+      return;
+    }
+
     state.speed = scrollSpeed();
     state.shake = Math.max(0, state.shake - dt);
     state.spawnTimer -= dt;
@@ -233,6 +316,50 @@
     updateFeathers(dt);
     updateHearts(dt);
     checkCollisions();
+  }
+
+  function updateDashMode(dt) {
+    state.speed = dashSpeed();
+    state.shake = Math.max(0, state.shake - dt);
+
+    const player = state.player;
+    player.vy += dashGravity() * dt;
+    player.y += player.vy * dt;
+    const groundCenter = dashGroundY() - player.r;
+    if (player.y >= groundCenter) {
+      player.y = groundCenter;
+      player.vy = 0;
+      player.onGround = true;
+    }
+    player.angle = player.onGround ? 0 : clamp(player.vy / 760, -0.5, 0.78);
+    player.flapPulse = Math.max(0, player.flapPulse - dt);
+
+    updateClouds(dt, state.speed * 0.18);
+    updateDashObstacles(dt);
+    updateFeathers(dt);
+    updateHearts(dt);
+    checkDashCollisions();
+  }
+
+  function updateDashObstacles(dt) {
+    for (let i = state.dashObstacles.length - 1; i >= 0; i -= 1) {
+      const obstacle = state.dashObstacles[i];
+      obstacle.x -= state.speed * dt;
+      if (!obstacle.passed && obstacle.x + obstacle.w < state.player.x - 12) {
+        obstacle.passed = true;
+        state.score += obstacle.type === "pad" ? 0 : 1;
+        if (obstacle.type !== "pad") {
+          state.message = "+1 dash";
+          addFeathers(state.player.x - 10, state.player.y + 8, 4, 75);
+        }
+      }
+      if (obstacle.x + obstacle.w < -40) state.dashObstacles.splice(i, 1);
+    }
+
+    while (state.dashSpawnX < W + 160) {
+      spawnDashPattern();
+    }
+    state.dashSpawnX -= state.speed * dt;
   }
 
   function updateClouds(dt, speed) {
@@ -262,6 +389,10 @@
         state.score += 1;
         state.message = "+1";
         addFeathers(state.player.x - 8, state.player.y, 5, 70);
+        if (state.score >= DASH_START_SCORE) {
+          startDashMode();
+          return;
+        }
       }
       if (obstacle.x + obstacle.w < -20) {
         state.obstacles.splice(i, 1);
@@ -325,6 +456,65 @@
           state.score += 2;
           state.message = "+2 corn";
           addFeathers(obstacle.bonus.x, obstacle.bonus.y, 11, 110);
+          if (state.score >= DASH_START_SCORE) {
+            startDashMode();
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  function checkDashCollisions() {
+    const player = state.player;
+    const body = {
+      x: player.x - 15,
+      y: player.y - 16,
+      w: 31,
+      h: 32,
+    };
+
+    for (const obstacle of state.dashObstacles) {
+      if (obstacle.type === "pad") {
+        const pad = { x: obstacle.x, y: obstacle.y - 8, w: obstacle.w, h: 22 };
+        if (rectsOverlap(body, pad) && player.vy >= 0) {
+          player.vy = -760;
+          player.onGround = false;
+          state.message = "bounce!";
+          addFeathers(obstacle.x + obstacle.w * 0.5, obstacle.y, 16, 150);
+        }
+        continue;
+      }
+
+      if (obstacle.type === "spike") {
+        const spikeHit = {
+          x: obstacle.x + 7,
+          y: obstacle.y - obstacle.h + 10,
+          w: obstacle.w - 14,
+          h: obstacle.h - 12,
+        };
+        if (rectsOverlap(body, spikeHit)) {
+          crash("Dash spike.");
+          return;
+        }
+      } else if (obstacle.type === "block") {
+        const block = {
+          x: obstacle.x + 4,
+          y: obstacle.y + 4,
+          w: obstacle.w - 8,
+          h: obstacle.h - 8,
+        };
+        const playerBottom = body.y + body.h;
+        const wasAbove = playerBottom - player.vy * (1 / 60) <= block.y + 8;
+        if (rectsOverlap(body, block)) {
+          if (player.vy >= 0 && wasAbove) {
+            player.y = block.y - player.r;
+            player.vy = 0;
+            player.onGround = true;
+          } else {
+            crash("Dash block.");
+            return;
+          }
         }
       }
     }
@@ -334,6 +524,10 @@
     const x = clamp(cx, rect.x, rect.x + rect.w);
     const y = clamp(cy, rect.y, rect.y + rect.h);
     return Math.hypot(cx - x, cy - y) <= r;
+  }
+
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
 
   function crash(message) {
@@ -370,8 +564,9 @@
 
     drawSky();
     drawClouds();
-    drawObstacles();
+    if (state.phase !== "dash") drawObstacles();
     drawGround();
+    if (state.phase === "dash") drawDashObstacles();
     drawFeathers();
     drawHearts();
     if (state.mode !== "title") drawChicken();
@@ -437,6 +632,107 @@
       );
       if (obstacle.bonus && !obstacle.bonus.collected) drawCorn(obstacle.bonus.x, obstacle.bonus.y);
     }
+  }
+
+  function drawDashObstacles() {
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 244, 214, 0.16)";
+    ctx.lineWidth = 2;
+    for (let x = -((state.time * state.speed) % 42); x < W + 42; x += 42) {
+      ctx.beginPath();
+      ctx.moveTo(x, PLAY_H - 78);
+      ctx.lineTo(x + 24, PLAY_H);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    for (const obstacle of state.dashObstacles) {
+      if (obstacle.type === "spike") drawDashSpike(obstacle);
+      if (obstacle.type === "block") drawDashBlock(obstacle);
+      if (obstacle.type === "pad") drawBouncePad(obstacle);
+    }
+  }
+
+  function drawDashSpike(obstacle) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    ctx.save();
+    ctx.fillStyle = "rgba(39, 49, 57, 0.2)";
+    ctx.beginPath();
+    ctx.ellipse(x + obstacle.w * 0.5 + 4, y + 4, obstacle.w * 0.5, 7, 0, 0, TWO_PI);
+    ctx.fill();
+
+    const grad = ctx.createLinearGradient(x, y - obstacle.h, x, y);
+    grad.addColorStop(0, "#f26673");
+    grad.addColorStop(0.55, "#ba344a");
+    grad.addColorStop(1, "#71233a");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h);
+    ctx.lineTo(x + obstacle.w, y);
+    ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(255, 246, 222, 0.82)";
+    ctx.beginPath();
+    ctx.arc(x + obstacle.w * 0.44, y - obstacle.h * 0.34, 4, 0, TWO_PI);
+    ctx.arc(x + obstacle.w * 0.64, y - obstacle.h * 0.18, 3, 0, TWO_PI);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(39, 49, 57, 0.28)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawDashBlock(obstacle) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    const w = obstacle.w;
+    const h = obstacle.h;
+    ctx.save();
+    ctx.fillStyle = "rgba(39, 49, 57, 0.22)";
+    roundedRect(x + 5, y + 7, w, h, 8);
+    ctx.fill();
+    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+    grad.addColorStop(0, "#f3d986");
+    grad.addColorStop(0.5, "#c3874e");
+    grad.addColorStop(1, "#7c4c34");
+    ctx.fillStyle = grad;
+    roundedRect(x, y, w, h, 7);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(80, 48, 32, 0.38)";
+    ctx.lineWidth = 4;
+    roundedRect(x + 4, y + 4, w - 8, h - 8, 5);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 244, 214, 0.4)";
+    ctx.beginPath();
+    ctx.arc(x + w * 0.28, y + h * 0.32, 5, 0, TWO_PI);
+    ctx.arc(x + w * 0.68, y + h * 0.58, 6, 0, TWO_PI);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBouncePad(obstacle) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    ctx.save();
+    ctx.fillStyle = "rgba(39, 49, 57, 0.18)";
+    ctx.beginPath();
+    ctx.ellipse(x + obstacle.w * 0.5, y + 14, obstacle.w * 0.55, 8, 0, 0, TWO_PI);
+    ctx.fill();
+    ctx.fillStyle = "#7ee27b";
+    roundedRect(x, y, obstacle.w, obstacle.h, 7);
+    ctx.fill();
+    ctx.fillStyle = "#fff4d6";
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y + 2);
+    ctx.lineTo(x + obstacle.w * 0.5, y - 18);
+    ctx.lineTo(x + obstacle.w - 12, y + 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawMushroomColumn(x, w, y, h, top, offset) {
@@ -730,7 +1026,7 @@
     ctx.fillText(`Best ${state.best}`, W - 26, 25);
     ctx.fillStyle = "rgba(255, 244, 214, 0.78)";
     ctx.font = "700 12px Inter, system-ui, sans-serif";
-    ctx.fillText("Space / click to flap   P pause   R restart", W - 26, 43);
+    ctx.fillText(state.phase === "dash" ? "Space / click to jump   P pause   R restart" : "Space / click to flap   P pause   R restart", W - 26, 43);
     ctx.restore();
   }
 
@@ -746,11 +1042,11 @@
     ctx.fillText("- For My Sexy Girlfriend Ella", W / 2, 190);
     ctx.fillStyle = "rgba(255, 244, 214, 0.92)";
     ctx.font = "700 20px Inter, system-ui, sans-serif";
-    ctx.fillText("Flap through the mushroom gaps. One button, quick restarts.", W / 2, 245);
+    ctx.fillText("Flap through mushroom gaps. At 50, it becomes Chicken Dash.", W / 2, 245);
     drawButton(W / 2 - 120, 292, 240, 58, "Start Flapping");
     ctx.fillStyle = "rgba(255, 244, 214, 0.82)";
     ctx.font = "700 16px Inter, system-ui, sans-serif";
-    ctx.fillText("Space, click, or tap to flap", W / 2, 392);
+    ctx.fillText("Space, click, or tap to flap. After 50, tap to jump.", W / 2, 392);
     ctx.restore();
   }
 
@@ -813,12 +1109,17 @@
   }
 
   function renderGameToText() {
-    const nextObstacle = state.obstacles.find((o) => o.x + o.w >= state.player.x - state.player.r);
+    const nextFlapObstacle = state.obstacles.find((o) => o.x + o.w >= state.player.x - state.player.r);
+    const nextDashObstacle = state.dashObstacles.find((o) => o.x + o.w >= state.player.x - state.player.r);
     const payload = {
       title: TITLE,
       coordinateSystem: "origin top-left, x right, y down, units canvas pixels, size 960x540",
       mode: state.mode,
-      objective: "tap to flap through mushroom gaps; score by passing each gap",
+      phase: state.phase,
+      objective:
+        state.phase === "dash"
+          ? "tap to jump over mushroom spikes and blocks in Chicken Dash mode"
+          : "tap to flap through mushroom gaps; score 50 unlocks Chicken Dash mode",
       score: state.score,
       best: state.best,
       difficulty: { level: difficultyLevel(), label: difficultyLabel() },
@@ -830,18 +1131,30 @@
         y: Math.round(state.player.y),
         vy: Math.round(state.player.vy),
         r: state.player.r,
+        onGround: state.player.onGround,
       },
-      nextObstacle: nextObstacle
+      nextObstacle: nextFlapObstacle
         ? {
-            x: Math.round(nextObstacle.x),
-            w: nextObstacle.w,
-            gapY: Math.round(nextObstacle.gapY),
-            gapH: Math.round(nextObstacle.gapH),
-            passed: nextObstacle.passed,
-            bonus: nextObstacle.bonus && !nextObstacle.bonus.collected,
+            x: Math.round(nextFlapObstacle.x),
+            w: nextFlapObstacle.w,
+            gapY: Math.round(nextFlapObstacle.gapY),
+            gapH: Math.round(nextFlapObstacle.gapH),
+            passed: nextFlapObstacle.passed,
+            bonus: nextFlapObstacle.bonus && !nextFlapObstacle.bonus.collected,
+          }
+        : null,
+      nextDashObstacle: nextDashObstacle
+        ? {
+            type: nextDashObstacle.type,
+            x: Math.round(nextDashObstacle.x),
+            y: Math.round(nextDashObstacle.y),
+            w: nextDashObstacle.w,
+            h: nextDashObstacle.h,
+            passed: nextDashObstacle.passed,
           }
         : null,
       obstaclesVisible: state.obstacles.length,
+      dashObstaclesVisible: state.dashObstacles.length,
       message: state.message,
     };
     return JSON.stringify(payload);
