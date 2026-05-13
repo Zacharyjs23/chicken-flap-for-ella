@@ -1,0 +1,58 @@
+:root {
+  color-scheme: dark;
+  --page: #15191b;
+  --rim: #f4d27b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(247, 189, 91, 0.18), transparent 28%),
+    linear-gradient(145deg, #15191b 0%, #24302c 48%, #181a20 100%);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.shell {
+  width: 100vw;
+  height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: clamp(8px, 2vw, 22px);
+}
+
+#game {
+  display: block;
+  width: min(100vw - 16px, calc((100svh - 16px) * 16 / 9));
+  height: auto;
+  max-height: calc(100svh - 16px);
+  aspect-ratio: 16 / 9;
+  border: 2px solid rgba(244, 210, 123, 0.55);
+  border-radius: 8px;
+  background: #94c5a4;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+  outline: none;
+  image-rendering: auto;
+  touch-action: none;
+}
+
+#game:focus-visible {
+  border-color: var(--rim);
+  box-shadow:
+    0 0 0 3px rgba(244, 210, 123, 0.22),
+    0 22px 70px rgba(0, 0, 0, 0.42);
+}
+
+body.fullscreen #game {
+  width: min(100vw, calc(100svh * 16 / 9));
+  max-height: 100svh;
+  border-radius: 0;
+  border-color: transparent;
+}
