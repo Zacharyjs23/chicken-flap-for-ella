@@ -31,11 +31,14 @@
     dashStreak: 0,
     dashPatternIndex: 0,
     dashTrailTimer: 0,
+    dashGravitySign: 1,
+    dashBuildGravity: 1,
     message: "",
     checkpointUnlocked: false,
     player: makePlayer(),
     obstacles: [],
     dashObstacles: [],
+    dashPlatforms: [],
     dashSpawnX: 0,
     dashTrails: [],
     feathers: [],
@@ -85,10 +88,13 @@
     state.dashStreak = 0;
     state.dashPatternIndex = 0;
     state.dashTrailTimer = 0;
+    state.dashGravitySign = 1;
+    state.dashBuildGravity = 1;
     state.message = useCheckpoint ? "Checkpoint 50" : "";
     state.player = makePlayer();
     state.obstacles.length = 0;
     state.dashObstacles.length = 0;
+    state.dashPlatforms.length = 0;
     state.dashSpawnX = 0;
     state.dashTrails.length = 0;
     state.feathers.length = 0;
@@ -156,8 +162,12 @@
     return PLAY_H - 22;
   }
 
+  function dashCeilingSurfaceY() {
+    return 128;
+  }
+
   function dashSpeed() {
-    return Math.min(500, 332 + Math.max(0, state.score - DASH_START_SCORE) * 4.4);
+    return Math.min(486, 318 + Math.max(0, state.score - DASH_START_SCORE) * 4.1);
   }
 
   function dashGravity() {
@@ -198,8 +208,30 @@
   }
 
   function jumpDash() {
+    if (triggerDashOrb()) return;
     state.dashJumpBuffer = 0.14;
     tryDashJump();
+  }
+
+  function triggerDashOrb() {
+    const player = state.player;
+    for (const obstacle of state.dashObstacles) {
+      if (obstacle.type !== "orb" || obstacle.used) continue;
+      const dx = player.x - obstacle.x;
+      const dy = player.y - obstacle.y;
+      if (Math.hypot(dx, dy) > 42) continue;
+      obstacle.used = true;
+      player.vy = -760 * state.dashGravitySign;
+      player.onGround = false;
+      state.dashJumpBuffer = 0;
+      state.dashCoyote = 0;
+      state.dashFlash = Math.max(state.dashFlash, 0.5);
+      state.message = "orb!";
+      addFeathers(obstacle.x, obstacle.y, 18, 160);
+      addDashTrail(player.x - 24, player.y + 4, 0.38, 26);
+      return true;
+    }
+    return false;
   }
 
   function tryDashJump() {
@@ -207,7 +239,7 @@
     if (!player.onGround && state.dashCoyote <= 0) return false;
     state.dashJumpBuffer = 0;
     state.dashCoyote = 0;
-    player.vy = dashJumpVelocity();
+    player.vy = dashJumpVelocity() * state.dashGravitySign;
     player.onGround = false;
     player.flapPulse = 0.22;
     state.dashFlash = Math.max(state.dashFlash, 0.25);
@@ -254,72 +286,133 @@
     state.player.vy = 0;
     state.player.angle = 0;
     state.player.onGround = true;
+    state.dashPlatforms.length = 0;
     state.dashSpawnX = W + 180;
     state.dashJumpBuffer = 0;
     state.dashCoyote = 0.12;
     state.dashStreak = 0;
     state.dashPatternIndex = 0;
     state.dashTrailTimer = 0;
+    state.dashGravitySign = 1;
+    state.dashBuildGravity = 1;
     state.dashTrails.length = 0;
+    addDashPlatform(-120, dashGroundY(), W + 520, 34, 1);
     addFeathers(state.player.x, state.player.y, 36, 210);
     addHeart(state.player.x - 26, state.player.y - 28);
-    spawnDashPattern(W + 430);
-    spawnDashPattern(W + 790);
+    spawnDashPattern(W + 520);
+    spawnDashPattern(W + 920);
   }
 
   function spawnDashPattern(forceX) {
     const x = forceX ?? state.dashSpawnX;
     const level = dashLevel();
-    const lane = dashGroundY();
-    const warmup = state.dashPatternIndex < 2;
+    const gravity = state.dashBuildGravity;
+    const lane = dashSurfaceY(gravity);
+    const warmup = state.dashPatternIndex < 4;
     const pools = [
-      ["single", "single", "step", "pad-hop"],
-      ["single", "step", "pad-hop", "double"],
-      ["single", "double", "block-spike", "pad-hop", "hop-gap"],
-      ["double", "step", "block-spike", "pad-hop", "low-high"],
+      ["single", "gap-hop", "step", "pad-hop"],
+      ["single", "gap-hop", "step", "orb-gap", "double"],
+      ["double", "step", "block-spike", "pad-hop", "orb-gap", "stairs"],
+      ["double", "stairs", "block-spike", "pad-hop", "orb-gap", "portal-flip"],
     ];
-    const pool = warmup ? ["single"] : pools[Math.min(pools.length - 1, Math.floor((level - 1) / 2))];
+    const pool = warmup ? ["single", "gap-hop"] : pools[Math.min(pools.length - 1, Math.floor((level - 1) / 2))];
     const choice = pool[(state.dashPatternIndex + Math.floor(seededRandom() * pool.length)) % pool.length];
     state.dashPatternIndex += 1;
 
     if (choice === "single") {
-      addDashObstacle("spike", x, lane, 34, 43);
+      addDashPlatform(x, lane, 330, 34, gravity);
+      addDashObstacle("spike", x + 154, lane, 34, 43, gravity);
       state.dashSpawnX = x + 320 - level * 8;
     } else if (choice === "double") {
-      addDashObstacle("spike", x, lane, 34, 43);
-      addDashObstacle("spike", x + 40, lane, 34, 43);
-      state.dashSpawnX = x + 370 - level * 9;
+      addDashPlatform(x, lane, 380, 34, gravity);
+      addDashObstacle("spike", x + 128, lane, 34, 43, gravity);
+      addDashObstacle("spike", x + 168, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 382 - level * 9;
     } else if (choice === "step") {
-      addDashObstacle("block", x, lane - 48, 58, 48);
-      state.dashSpawnX = x + 350 - level * 8;
+      const high = lane - 76 * gravity;
+      addDashPlatform(x, lane, 160, 34, gravity);
+      addDashPlatform(x + 205, high, 210, 34, gravity);
+      addDashObstacle("spike", x + 305, high, 34, 43, gravity);
+      state.dashSpawnX = x + 430 - level * 8;
     } else if (choice === "block-spike") {
-      addDashObstacle("block", x, lane - 48, 58, 48);
-      addDashObstacle("spike", x + 112, lane, 34, 43);
-      state.dashSpawnX = x + 410 - level * 10;
+      addDashPlatform(x, lane, 460, 34, gravity);
+      addDashPlatform(x + 118, lane - 66 * gravity, 82, 34, gravity);
+      addDashObstacle("spike", x + 254, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 455 - level * 10;
     } else if (choice === "pad-hop") {
-      addDashObstacle("pad", x, lane - 8, 56, 12);
-      addDashObstacle("spike", x + 164, lane, 34, 43);
-      state.dashSpawnX = x + 430 - level * 10;
-    } else if (choice === "hop-gap") {
-      addDashObstacle("spike", x, lane, 34, 43);
-      addDashObstacle("spike", x + 132, lane, 34, 43);
-      state.dashSpawnX = x + 430 - level * 9;
+      const high = lane - 112 * gravity;
+      addDashPlatform(x, lane, 160, 34, gravity);
+      addDashObstacle("pad", x + 62, lane, 58, 12, gravity);
+      addDashPlatform(x + 250, high, 240, 34, gravity);
+      addDashObstacle("spike", x + 378, high, 34, 43, gravity);
+      state.dashSpawnX = x + 510 - level * 10;
+    } else if (choice === "orb-gap") {
+      addDashPlatform(x, lane, 150, 34, gravity);
+      addDashObstacle("orb", x + 222, lane - 118 * gravity, 34, 34, gravity);
+      addDashPlatform(x + 330, lane, 300, 34, gravity);
+      addDashObstacle("spike", x + 482, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 620 - level * 9;
+    } else if (choice === "stairs") {
+      const mid = lane - 66 * gravity;
+      const high = lane - 126 * gravity;
+      addDashPlatform(x, lane, 150, 34, gravity);
+      addDashPlatform(x + 190, mid, 154, 34, gravity);
+      addDashPlatform(x + 380, high, 190, 34, gravity);
+      addDashObstacle("spike", x + 456, high, 34, 43, gravity);
+      state.dashSpawnX = x + 585 - level * 9;
+    } else if (choice === "gap-hop") {
+      addDashPlatform(x, lane, 170, 34, gravity);
+      addDashPlatform(x + 305, lane, 260, 34, gravity);
+      addDashObstacle("spike", x + 420, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 565 - level * 9;
+    } else if (choice === "portal-flip") {
+      addDashPlatform(x, lane, 210, 34, gravity);
+      addDashObstacle("portal", x + 248, lane + (gravity === 1 ? -128 : 12), 54, 116, gravity);
+      state.dashBuildGravity *= -1;
+      const nextGravity = state.dashBuildGravity;
+      const nextLane = dashSurfaceY(nextGravity);
+      addDashPlatform(x + 360, nextLane, 460, 34, nextGravity);
+      addDashObstacle("spike", x + 565, nextLane, 34, 43, nextGravity);
+      state.dashSpawnX = x + 790 - level * 10;
     } else {
-      addDashObstacle("spike", x, lane, 34, 43);
-      addDashObstacle("block", x + 132, lane - 48, 58, 48);
-      state.dashSpawnX = x + 430 - level * 10;
+      addDashPlatform(x, lane, 380, 34, gravity);
+      addDashObstacle("spike", x + 120, lane, 34, 43, gravity);
+      addDashObstacle("spike", x + 252, lane, 34, 43, gravity);
+      state.dashSpawnX = x + 430 - level * 9;
     }
-    state.dashSpawnX = Math.max(x + 238, state.dashSpawnX + seededRandom() * 34);
+    state.dashSpawnX = Math.max(x + 280, state.dashSpawnX + seededRandom() * 34);
   }
 
-  function addDashObstacle(type, x, y, w, h) {
+  function dashSurfaceY(gravity) {
+    return gravity === 1 ? dashGroundY() : dashCeilingSurfaceY();
+  }
+
+  function platformYFromSurface(surfaceY, h, gravity) {
+    return gravity === 1 ? surfaceY : surfaceY - h;
+  }
+
+  function addDashPlatform(x, surfaceY, w, h, gravity) {
+    state.dashPlatforms.push({
+      x,
+      y: platformYFromSurface(surfaceY, h, gravity),
+      surfaceY,
+      w,
+      h,
+      gravity,
+      pulse: seededRandom() * TWO_PI,
+    });
+  }
+
+  function addDashObstacle(type, x, y, w, h, gravity) {
     state.dashObstacles.push({
       type,
       x,
       y,
       w,
       h,
+      gravity,
       passed: false,
+      used: false,
       pulse: seededRandom() * TWO_PI,
     });
   }
@@ -410,27 +503,25 @@
 
     const player = state.player;
     const wasGrounded = player.onGround;
+    const previousY = player.y;
     player.onGround = false;
-    player.vy += dashGravity() * dt;
+    player.vy += dashGravity() * state.dashGravitySign * dt;
     player.y += player.vy * dt;
-    const groundCenter = dashGroundY() - player.r;
-    if (player.y >= groundCenter) {
-      player.y = groundCenter;
-      player.vy = 0;
-      player.onGround = true;
-    }
     updateDashObstacles(dt);
+    resolveDashPlatformCollisions(previousY);
     checkDashCollisions();
 
     if (player.onGround) {
       state.dashCoyote = 0.1;
-      if (!wasGrounded) addLandingDust(player.x - 8, player.y + player.r);
+      if (!wasGrounded) addLandingDust(player.x - 8, player.y + player.r * state.dashGravitySign);
     } else {
       state.dashCoyote = Math.max(0, state.dashCoyote - dt);
     }
     if (state.dashJumpBuffer > 0) tryDashJump();
 
-    player.angle = player.onGround ? Math.sin(state.time * 18) * 0.04 : clamp(player.vy / 760, -0.48, 0.72);
+    player.angle = player.onGround
+      ? Math.sin(state.time * 18) * 0.04
+      : clamp((player.vy * state.dashGravitySign) / 760, -0.48, 0.72);
     player.flapPulse = Math.max(0, player.flapPulse - dt);
 
     if (state.dashTrailTimer <= 0) {
@@ -445,13 +536,19 @@
   }
 
   function updateDashObstacles(dt) {
+    for (let i = state.dashPlatforms.length - 1; i >= 0; i -= 1) {
+      const platform = state.dashPlatforms[i];
+      platform.x -= state.speed * dt;
+      if (platform.x + platform.w < -120) state.dashPlatforms.splice(i, 1);
+    }
+
     for (let i = state.dashObstacles.length - 1; i >= 0; i -= 1) {
       const obstacle = state.dashObstacles[i];
       obstacle.x -= state.speed * dt;
       if (!obstacle.passed && obstacle.x + obstacle.w < state.player.x - 12) {
         obstacle.passed = true;
-        state.score += obstacle.type === "pad" ? 0 : 1;
-        if (obstacle.type !== "pad") {
+        if (obstacle.type === "spike") {
+          state.score += 1;
           state.dashStreak += 1;
           state.message = state.dashStreak >= 5 ? `${state.dashStreak} streak` : "+1 dash";
           addFeathers(state.player.x - 10, state.player.y + 8, 5, 85);
@@ -461,10 +558,43 @@
       if (obstacle.x + obstacle.w < -40) state.dashObstacles.splice(i, 1);
     }
 
-    while (state.dashSpawnX < W + 160) {
+    while (state.dashSpawnX < W + 620) {
       spawnDashPattern();
     }
     state.dashSpawnX -= state.speed * dt;
+  }
+
+  function resolveDashPlatformCollisions(previousY) {
+    const player = state.player;
+    const sign = state.dashGravitySign;
+    let landed = false;
+    for (const platform of state.dashPlatforms) {
+      if (platform.gravity !== sign) continue;
+      if (player.x + 14 < platform.x || player.x - 14 > platform.x + platform.w) continue;
+      const surface = sign === 1 ? platform.y : platform.y + platform.h;
+      if (sign === 1) {
+        const crossed = previousY + player.r <= surface + 2 && player.y + player.r >= surface;
+        if (crossed && player.vy >= 0) {
+          player.y = surface - player.r;
+          landed = true;
+        }
+      } else {
+        const crossed = previousY - player.r >= surface - 2 && player.y - player.r <= surface;
+        if (crossed && player.vy <= 0) {
+          player.y = surface + player.r;
+          landed = true;
+        }
+      }
+      if (landed) {
+        player.vy = 0;
+        player.onGround = true;
+        break;
+      }
+    }
+
+    if (player.y - player.r > H + 50 || player.y + player.r < 48) {
+      crash("Missed platform.");
+    }
   }
 
   function addDashTrail(x, y, life, size) {
@@ -609,45 +739,41 @@
 
     for (const obstacle of state.dashObstacles) {
       if (obstacle.type === "pad") {
-        const pad = { x: obstacle.x, y: obstacle.y - 8, w: obstacle.w, h: 22 };
-        if (rectsOverlap(body, pad) && player.vy >= 0) {
-          player.vy = -760;
+        const padY = obstacle.gravity === 1 ? obstacle.y - 12 : obstacle.y;
+        const pad = { x: obstacle.x, y: padY, w: obstacle.w, h: 24 };
+        if (!obstacle.used && rectsOverlap(body, pad) && player.vy * obstacle.gravity >= -40) {
+          obstacle.used = true;
+          player.vy = -820 * obstacle.gravity;
           player.onGround = false;
+          state.dashCoyote = 0;
           state.message = "bounce!";
+          state.dashFlash = Math.max(state.dashFlash, 0.45);
           addFeathers(obstacle.x + obstacle.w * 0.5, obstacle.y, 16, 150);
+          addDashTrail(player.x - 22, player.y + 4, 0.36, 26);
         }
         continue;
       }
 
       if (obstacle.type === "spike") {
-        const spikeHit = {
-          x: obstacle.x + 7,
-          y: obstacle.y - obstacle.h + 10,
-          w: obstacle.w - 14,
-          h: obstacle.h - 12,
-        };
+        const spikeHit =
+          obstacle.gravity === 1
+            ? { x: obstacle.x + 10, y: obstacle.y - obstacle.h + 17, w: obstacle.w - 20, h: obstacle.h - 20 }
+            : { x: obstacle.x + 10, y: obstacle.y + 3, w: obstacle.w - 20, h: obstacle.h - 20 };
         if (rectsOverlap(body, spikeHit)) {
           crash("Dash spike.");
           return;
         }
-      } else if (obstacle.type === "block") {
-        const block = {
-          x: obstacle.x + 4,
-          y: obstacle.y + 4,
-          w: obstacle.w - 8,
-          h: obstacle.h - 8,
-        };
-        const playerBottom = body.y + body.h;
-        const wasAbove = playerBottom - player.vy * (1 / 60) <= block.y + 8;
-        if (rectsOverlap(body, block)) {
-          if (player.vy >= 0 && wasAbove) {
-            player.y = block.y - player.r;
-            player.vy = 0;
-            player.onGround = true;
-          } else {
-            crash("Dash block.");
-            return;
-          }
+      } else if (obstacle.type === "portal") {
+        const portal = { x: obstacle.x + 7, y: obstacle.y, w: obstacle.w - 14, h: obstacle.h };
+        if (!obstacle.used && rectsOverlap(body, portal)) {
+          obstacle.used = true;
+          state.dashGravitySign *= -1;
+          player.vy = 520 * state.dashGravitySign;
+          player.onGround = false;
+          state.dashCoyote = 0.08;
+          state.dashFlash = Math.max(state.dashFlash, 0.75);
+          state.message = state.dashGravitySign === 1 ? "floor portal!" : "ceiling portal!";
+          addFeathers(player.x, player.y, 26, 190);
         }
       }
     }
@@ -703,6 +829,7 @@
     drawGround();
     if (state.phase === "dash") {
       drawDashTrack();
+      drawDashPlatforms();
       drawDashCheckpointSign();
       drawDashObstacles();
       drawDashTrails();
@@ -863,15 +990,16 @@
     ctx.restore();
 
     for (const obstacle of state.dashObstacles) {
-      if (obstacle.type !== "pad" && !obstacle.passed && obstacle.x > state.player.x + 34 && obstacle.x < W + 100) {
+      if (["spike", "orb"].includes(obstacle.type) && !obstacle.passed && obstacle.x > state.player.x + 34 && obstacle.x < W + 100) {
         drawDashCue(obstacle);
       }
     }
 
     for (const obstacle of state.dashObstacles) {
       if (obstacle.type === "spike") drawDashSpike(obstacle);
-      if (obstacle.type === "block") drawDashBlock(obstacle);
       if (obstacle.type === "pad") drawBouncePad(obstacle);
+      if (obstacle.type === "orb") drawJumpOrb(obstacle);
+      if (obstacle.type === "portal") drawGravityPortal(obstacle);
     }
   }
 
@@ -879,7 +1007,8 @@
     const cueX = obstacle.x - 76;
     const distance = clamp((obstacle.x - state.player.x) / 520, 0, 1);
     const alpha = 0.25 + (1 - distance) * 0.55;
-    const y = dashGroundY() - (obstacle.type === "block" ? 96 : 66);
+    const sign = obstacle.gravity ?? 1;
+    const y = obstacle.type === "orb" ? obstacle.y : obstacle.y - 66 * sign;
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.shadowColor = "rgba(255, 232, 139, 0.55)";
@@ -891,13 +1020,13 @@
     ctx.stroke();
     ctx.fillStyle = "#ffe88b";
     ctx.beginPath();
-    ctx.moveTo(cueX - 9, y + 2);
-    ctx.lineTo(cueX, y - 10);
-    ctx.lineTo(cueX + 9, y + 2);
-    ctx.lineTo(cueX + 3, y + 2);
-    ctx.lineTo(cueX + 3, y + 13);
-    ctx.lineTo(cueX - 3, y + 13);
-    ctx.lineTo(cueX - 3, y + 2);
+    ctx.moveTo(cueX - 9, y + 2 * sign);
+    ctx.lineTo(cueX, y - 10 * sign);
+    ctx.lineTo(cueX + 9, y + 2 * sign);
+    ctx.lineTo(cueX + 3, y + 2 * sign);
+    ctx.lineTo(cueX + 3, y + 13 * sign);
+    ctx.lineTo(cueX - 3, y + 13 * sign);
+    ctx.lineTo(cueX - 3, y + 2 * sign);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -907,6 +1036,11 @@
     const x = obstacle.x;
     const y = obstacle.y;
     ctx.save();
+    if (obstacle.gravity === -1) {
+      ctx.translate(x + obstacle.w * 0.5, y);
+      ctx.scale(1, -1);
+      ctx.translate(-(x + obstacle.w * 0.5), -y);
+    }
     ctx.fillStyle = "rgba(8, 18, 22, 0.32)";
     ctx.beginPath();
     ctx.ellipse(x + obstacle.w * 0.5 + 4, y + 5, obstacle.w * 0.58, 8, 0, 0, TWO_PI);
@@ -957,6 +1091,67 @@
     ctx.quadraticCurveTo(x + obstacle.w * 0.5, y - 8, x, y);
     ctx.bezierCurveTo(x - 3, y - 7, x + obstacle.w * 0.12, y - 25, x + obstacle.w * 0.5, y - obstacle.h);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawJumpOrb(obstacle) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    const pulse = 1 + Math.sin(state.time * 9 + obstacle.pulse) * 0.08;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(pulse, pulse);
+    ctx.globalAlpha = obstacle.used ? 0.35 : 1;
+    ctx.shadowColor = "rgba(255, 232, 139, 0.68)";
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = "#ffe88b";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, TWO_PI);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#5feec1";
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, TWO_PI);
+    ctx.fill();
+    ctx.fillStyle = "#17303a";
+    ctx.beginPath();
+    ctx.moveTo(-5, 2);
+    ctx.lineTo(0, -7);
+    ctx.lineTo(5, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawGravityPortal(obstacle) {
+    const x = obstacle.x;
+    const y = obstacle.y;
+    const w = obstacle.w;
+    const h = obstacle.h;
+    const pulse = 0.5 + Math.sin(state.time * 7 + obstacle.pulse) * 0.5;
+    ctx.save();
+    ctx.shadowColor = "rgba(95, 238, 193, 0.6)";
+    ctx.shadowBlur = 16 + pulse * 10;
+    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+    grad.addColorStop(0, "#5feec1");
+    grad.addColorStop(0.46, "#ffe88b");
+    grad.addColorStop(1, "#ff6f8b");
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.5, y + h * 0.5, w * 0.42, h * 0.5, 0, 0, TWO_PI);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255, 244, 214, 0.8)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i += 1) {
+      const yy = y + h * (0.28 + i * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.28, yy);
+      ctx.lineTo(x + w * 0.72, yy);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -1025,11 +1220,17 @@
 
   function drawBouncePad(obstacle) {
     const x = obstacle.x;
-    const y = obstacle.y;
+    const baseY = obstacle.y;
     ctx.save();
+    if (obstacle.gravity === -1) {
+      ctx.translate(x + obstacle.w * 0.5, baseY);
+      ctx.scale(1, -1);
+      ctx.translate(-(x + obstacle.w * 0.5), -baseY);
+    }
+    const y = baseY - obstacle.h;
     ctx.fillStyle = "rgba(8, 18, 22, 0.28)";
     ctx.beginPath();
-    ctx.ellipse(x + obstacle.w * 0.5, y + 14, obstacle.w * 0.55, 8, 0, 0, TWO_PI);
+    ctx.ellipse(x + obstacle.w * 0.5, baseY + 3, obstacle.w * 0.55, 8, 0, 0, TWO_PI);
     ctx.fill();
 
     ctx.shadowColor = "rgba(118, 255, 192, 0.58)";
@@ -1307,6 +1508,40 @@
     ctx.restore();
   }
 
+  function drawDashPlatforms() {
+    for (const platform of state.dashPlatforms) {
+      ctx.save();
+      const top = platform.y;
+      const surface = platform.gravity === 1 ? platform.y : platform.y + platform.h;
+      ctx.fillStyle = "rgba(8, 18, 22, 0.26)";
+      roundedRect(platform.x + 5, platform.y + 7 * platform.gravity, platform.w, platform.h, 5);
+      ctx.fill();
+
+      const grad = ctx.createLinearGradient(platform.x, top, platform.x, top + platform.h);
+      grad.addColorStop(0, platform.gravity === 1 ? "#ffe88b" : "#203747");
+      grad.addColorStop(0.18, "#5feec1");
+      grad.addColorStop(0.56, "#244b51");
+      grad.addColorStop(1, platform.gravity === 1 ? "#15232c" : "#ffe88b");
+      ctx.fillStyle = grad;
+      roundedRect(platform.x, platform.y, platform.w, platform.h, 4);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 244, 214, 0.72)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(platform.x, surface);
+      ctx.lineTo(platform.x + platform.w, surface);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 244, 214, 0.16)";
+      const tileOffset = (state.time * state.speed * 0.22 + platform.pulse * 12) % 38;
+      for (let x = platform.x - tileOffset; x < platform.x + platform.w; x += 38) {
+        ctx.fillRect(x, platform.y + 6, 18, Math.max(4, platform.h - 12));
+      }
+      ctx.restore();
+    }
+  }
+
   function drawDashCheckpointSign() {
     if (!state.checkpointUnlocked) return;
     const x = 48;
@@ -1390,10 +1625,12 @@
   function drawChicken() {
     const p = state.player;
     const pulse = p.flapPulse > 0 ? p.flapPulse * 22 : 0;
-    const bob = Math.sin(state.time * 9) * 1.4;
+    const gravityFlip = state.phase === "dash" ? state.dashGravitySign : 1;
+    const bob = Math.sin(state.time * 9) * 1.4 * gravityFlip;
     ctx.save();
     ctx.translate(p.x, p.y + bob);
     ctx.rotate(p.angle);
+    if (gravityFlip === -1) ctx.scale(1, -1);
 
     ctx.fillStyle = "rgba(39, 49, 57, 0.22)";
     ctx.beginPath();
@@ -1615,6 +1852,7 @@
   function renderGameToText() {
     const nextFlapObstacle = state.obstacles.find((o) => o.x + o.w >= state.player.x - state.player.r);
     const nextDashObstacle = state.dashObstacles.find((o) => o.x + o.w >= state.player.x - state.player.r);
+    const nextDashPlatform = state.dashPlatforms.find((p) => p.x + p.w >= state.player.x - state.player.r);
     const payload = {
       title: TITLE,
       coordinateSystem: "origin top-left, x right, y down, units canvas pixels, size 960x540",
@@ -1632,6 +1870,7 @@
       dashStreak: state.dashStreak,
       dashJumpBuffer: Number(state.dashJumpBuffer.toFixed(2)),
       dashCoyote: Number(state.dashCoyote.toFixed(2)),
+      dashGravity: state.dashGravitySign === 1 ? "floor" : "ceiling",
       speed: Math.round(state.speed),
       gapForgiveness: Number(gapForgiveness().toFixed(1)),
       obstacleSpacing: Math.round(obstacleSpacing()),
@@ -1659,11 +1898,33 @@
             y: Math.round(nextDashObstacle.y),
             w: nextDashObstacle.w,
             h: nextDashObstacle.h,
+            gravity: nextDashObstacle.gravity === 1 ? "floor" : "ceiling",
             passed: nextDashObstacle.passed,
           }
         : null,
+      nextDashPlatform: nextDashPlatform
+        ? {
+            x: Math.round(nextDashPlatform.x),
+            y: Math.round(nextDashPlatform.y),
+            surfaceY: Math.round(nextDashPlatform.surfaceY),
+            w: Math.round(nextDashPlatform.w),
+            h: nextDashPlatform.h,
+            gravity: nextDashPlatform.gravity === 1 ? "floor" : "ceiling",
+          }
+        : null,
+      dashPlatforms: state.dashPlatforms
+        .filter((p) => p.x + p.w >= state.player.x - state.player.r && p.x < W + 80)
+        .slice(0, 5)
+        .map((p) => ({
+          x: Math.round(p.x),
+          y: Math.round(p.y),
+          surfaceY: Math.round(p.surfaceY),
+          w: Math.round(p.w),
+          gravity: p.gravity === 1 ? "floor" : "ceiling",
+        })),
       obstaclesVisible: state.obstacles.length,
       dashObstaclesVisible: state.dashObstacles.length,
+      dashPlatformsVisible: state.dashPlatforms.length,
       dashTrailsVisible: state.dashTrails.length,
       message: state.message,
     };
