@@ -25,7 +25,9 @@
     speed: 185,
     spawnTimer: 0,
     shake: 0,
+    dashFlash: 0,
     message: "",
+    checkpointUnlocked: false,
     player: makePlayer(),
     obstacles: [],
     dashObstacles: [],
@@ -62,15 +64,17 @@
   }
 
   function resetGame() {
+    const useCheckpoint = state.checkpointUnlocked;
     state.mode = "playing";
-    state.phase = "flap";
+    state.phase = useCheckpoint ? "dash" : "flap";
     state.time = 0;
-    state.score = 0;
-    state.seed = 17;
-    state.speed = 185;
-    state.spawnTimer = 0.45;
+    state.score = useCheckpoint ? DASH_START_SCORE : 0;
+    state.seed = useCheckpoint ? 5017 : 17;
+    state.speed = useCheckpoint ? dashSpeed() : 185;
+    state.spawnTimer = useCheckpoint ? 0 : 0.45;
     state.shake = 0;
-    state.message = "";
+    state.dashFlash = useCheckpoint ? 0.9 : 0;
+    state.message = useCheckpoint ? "Checkpoint 50" : "";
     state.player = makePlayer();
     state.obstacles.length = 0;
     state.dashObstacles.length = 0;
@@ -78,6 +82,10 @@
     state.feathers.length = 0;
     state.hearts.length = 0;
     state.clouds = makeClouds();
+    if (useCheckpoint) {
+      startDashMode({ fromCheckpoint: true });
+      return;
+    }
     spawnObstacle(720);
     spawnObstacle(1080);
   }
@@ -147,12 +155,14 @@
   function flap() {
     if (state.mode === "title") {
       resetGame();
-      applyFlap();
+      if (state.phase === "dash") jumpDash();
+      else applyFlap();
       return;
     }
     if (state.mode === "gameover") {
       resetGame();
-      applyFlap();
+      if (state.phase === "dash") jumpDash();
+      else applyFlap();
       return;
     }
     if (state.mode !== "playing") return;
@@ -200,10 +210,12 @@
     });
   }
 
-  function startDashMode() {
-    if (state.phase === "dash") return;
+  function startDashMode(options = {}) {
+    if (state.phase === "dash" && !options.fromCheckpoint) return;
     state.phase = "dash";
-    state.message = "Dash mode!";
+    state.checkpointUnlocked = true;
+    state.message = options.fromCheckpoint ? "Checkpoint 50" : "Checkpoint saved!";
+    state.dashFlash = options.fromCheckpoint ? 0.9 : 1.2;
     state.obstacles.length = 0;
     state.dashObstacles.length = 0;
     state.speed = dashSpeed();
@@ -274,6 +286,7 @@
   function update(dt) {
     if (state.mode === "title") {
       state.time += dt;
+      state.dashFlash = Math.max(0, state.dashFlash - dt);
       updateClouds(dt, 26);
       updateFeathers(dt);
       updateHearts(dt);
@@ -289,6 +302,7 @@
     if (state.mode === "gameover") {
       state.time += dt;
       state.shake = Math.max(0, state.shake - dt);
+      state.dashFlash = Math.max(0, state.dashFlash - dt);
       updateClouds(dt, 26);
       updateFeathers(dt);
       updateHearts(dt);
@@ -321,6 +335,7 @@
   function updateDashMode(dt) {
     state.speed = dashSpeed();
     state.shake = Math.max(0, state.shake - dt);
+    state.dashFlash = Math.max(0, state.dashFlash - dt);
 
     const player = state.player;
     player.vy += dashGravity() * dt;
@@ -563,10 +578,15 @@
     }
 
     drawSky();
+    if (state.phase === "dash") drawDashBackdrop();
     drawClouds();
     if (state.phase !== "dash") drawObstacles();
     drawGround();
-    if (state.phase === "dash") drawDashObstacles();
+    if (state.phase === "dash") {
+      drawDashTrack();
+      drawDashCheckpointSign();
+      drawDashObstacles();
+    }
     drawFeathers();
     drawHearts();
     if (state.mode !== "title") drawChicken();
@@ -580,6 +600,11 @@
   }
 
   function drawSky() {
+    if (state.phase === "dash") {
+      drawDashSky();
+      return;
+    }
+
     const sky = ctx.createLinearGradient(0, 0, 0, PLAY_H);
     sky.addColorStop(0, "#bde7df");
     sky.addColorStop(0.62, "#8dcc8d");
@@ -592,6 +617,77 @@
       const y = 326 + Math.sin(x * 0.02 + state.time) * 8;
       drawHill(x, y, 120, 70);
     }
+  }
+
+  function drawDashSky() {
+    const sky = ctx.createLinearGradient(0, 0, 0, PLAY_H);
+    sky.addColorStop(0, "#22334f");
+    sky.addColorStop(0.48, "#25706e");
+    sky.addColorStop(0.78, "#73b966");
+    sky.addColorStop(1, "#a7c75f");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, PLAY_H);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const glow = ctx.createRadialGradient(W * 0.74, 118, 10, W * 0.74, 118, 190);
+    glow.addColorStop(0, "rgba(255, 238, 147, 0.55)");
+    glow.addColorStop(0.42, "rgba(88, 235, 194, 0.18)");
+    glow.addColorStop(1, "rgba(88, 235, 194, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, PLAY_H);
+
+    ctx.strokeStyle = "rgba(255, 239, 166, 0.18)";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(-20, 120 + Math.sin(state.time * 1.7) * 10);
+    ctx.bezierCurveTo(230, 52, 450, 176, W + 20, 92);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(111, 243, 204, 0.18)";
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(-40, 212);
+    ctx.bezierCurveTo(250, 148, 478, 260, W + 40, 164);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(24, 49, 52, 0.3)";
+    for (let x = -80; x < W + 90; x += 118) {
+      const y = 338 + Math.sin(x * 0.016 + state.time * 0.7) * 6;
+      drawHill(x, y, 190, 84);
+    }
+  }
+
+  function drawDashBackdrop() {
+    ctx.save();
+    ctx.strokeStyle = "rgba(214, 255, 234, 0.16)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 12; i += 1) {
+      const y = 92 + i * 24;
+      const x = W - ((state.time * state.speed * 0.5 + i * 97) % (W + 260));
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 170, y - 18);
+      ctx.stroke();
+    }
+
+    const horizon = PLAY_H - 88;
+    ctx.strokeStyle = "rgba(255, 244, 214, 0.14)";
+    ctx.lineWidth = 1.5;
+    for (let y = horizon; y < PLAY_H; y += 18) {
+      const spread = (y - horizon) * 4;
+      ctx.beginPath();
+      ctx.moveTo(W * 0.5 - spread, y);
+      ctx.lineTo(W * 0.5 + spread, y);
+      ctx.stroke();
+    }
+    for (let i = -7; i <= 7; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(W * 0.5 + i * 24, horizon);
+      ctx.lineTo(W * 0.5 + i * 92, PLAY_H);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawHill(x, y, w, h) {
@@ -607,7 +703,7 @@
       ctx.save();
       ctx.translate(cloud.x, cloud.y);
       ctx.scale(cloud.s, cloud.s);
-      ctx.fillStyle = "rgba(255, 247, 223, 0.72)";
+      ctx.fillStyle = state.phase === "dash" ? "rgba(213, 255, 238, 0.5)" : "rgba(255, 247, 223, 0.72)";
       ctx.beginPath();
       ctx.arc(-34, 10, 22, 0, TWO_PI);
       ctx.arc(-8, 2, 28, 0, TWO_PI);
@@ -657,31 +753,55 @@
     const x = obstacle.x;
     const y = obstacle.y;
     ctx.save();
-    ctx.fillStyle = "rgba(39, 49, 57, 0.2)";
+    ctx.fillStyle = "rgba(8, 18, 22, 0.32)";
     ctx.beginPath();
-    ctx.ellipse(x + obstacle.w * 0.5 + 4, y + 4, obstacle.w * 0.5, 7, 0, 0, TWO_PI);
+    ctx.ellipse(x + obstacle.w * 0.5 + 4, y + 5, obstacle.w * 0.58, 8, 0, 0, TWO_PI);
     ctx.fill();
 
+    const stem = ctx.createLinearGradient(x + 8, y - 26, x + obstacle.w - 8, y);
+    stem.addColorStop(0, "#fff1c7");
+    stem.addColorStop(0.55, "#d7aa76");
+    stem.addColorStop(1, "#8b603c");
+    ctx.fillStyle = stem;
+    roundedRect(x + 8, y - 25, obstacle.w - 16, 27, 7);
+    ctx.fill();
+
+    ctx.shadowColor = "rgba(255, 101, 124, 0.42)";
+    ctx.shadowBlur = 14;
     const grad = ctx.createLinearGradient(x, y - obstacle.h, x, y);
-    grad.addColorStop(0, "#f26673");
-    grad.addColorStop(0.55, "#ba344a");
-    grad.addColorStop(1, "#71233a");
+    grad.addColorStop(0, "#ff8690");
+    grad.addColorStop(0.5, "#d83c58");
+    grad.addColorStop(1, "#7b243f");
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h);
-    ctx.lineTo(x + obstacle.w, y);
-    ctx.lineTo(x, y);
+    ctx.bezierCurveTo(x + obstacle.w * 0.88, y - 25, x + obstacle.w + 3, y - 6, x + obstacle.w, y);
+    ctx.quadraticCurveTo(x + obstacle.w * 0.5, y - 8, x, y);
+    ctx.bezierCurveTo(x - 3, y - 7, x + obstacle.w * 0.12, y - 25, x + obstacle.w * 0.5, y - obstacle.h);
     ctx.closePath();
     ctx.fill();
+    ctx.shadowBlur = 0;
 
-    ctx.fillStyle = "rgba(255, 246, 222, 0.82)";
+    ctx.fillStyle = "rgba(255, 246, 222, 0.9)";
     ctx.beginPath();
-    ctx.arc(x + obstacle.w * 0.44, y - obstacle.h * 0.34, 4, 0, TWO_PI);
-    ctx.arc(x + obstacle.w * 0.64, y - obstacle.h * 0.18, 3, 0, TWO_PI);
+    ctx.arc(x + obstacle.w * 0.42, y - obstacle.h * 0.44, 4, 0, TWO_PI);
+    ctx.arc(x + obstacle.w * 0.63, y - obstacle.h * 0.26, 3.5, 0, TWO_PI);
+    ctx.arc(x + obstacle.w * 0.37, y - obstacle.h * 0.14, 3, 0, TWO_PI);
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(39, 49, 57, 0.28)";
+    ctx.strokeStyle = "rgba(255, 239, 188, 0.58)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h + 8);
+    ctx.lineTo(x + obstacle.w * 0.48, y - 7);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(29, 29, 33, 0.34)";
     ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x + obstacle.w * 0.5, y - obstacle.h);
+    ctx.bezierCurveTo(x + obstacle.w * 0.88, y - 25, x + obstacle.w + 3, y - 6, x + obstacle.w, y);
+    ctx.quadraticCurveTo(x + obstacle.w * 0.5, y - 8, x, y);
+    ctx.bezierCurveTo(x - 3, y - 7, x + obstacle.w * 0.12, y - 25, x + obstacle.w * 0.5, y - obstacle.h);
     ctx.stroke();
     ctx.restore();
   }
@@ -692,25 +812,60 @@
     const w = obstacle.w;
     const h = obstacle.h;
     ctx.save();
-    ctx.fillStyle = "rgba(39, 49, 57, 0.22)";
-    roundedRect(x + 5, y + 7, w, h, 8);
-    ctx.fill();
-    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, "#f3d986");
-    grad.addColorStop(0.5, "#c3874e");
-    grad.addColorStop(1, "#7c4c34");
-    ctx.fillStyle = grad;
-    roundedRect(x, y, w, h, 7);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(80, 48, 32, 0.38)";
-    ctx.lineWidth = 4;
-    roundedRect(x + 4, y + 4, w - 8, h - 8, 5);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(255, 244, 214, 0.4)";
+    ctx.fillStyle = "rgba(8, 18, 22, 0.32)";
     ctx.beginPath();
-    ctx.arc(x + w * 0.28, y + h * 0.32, 5, 0, TWO_PI);
-    ctx.arc(x + w * 0.68, y + h * 0.58, 6, 0, TWO_PI);
+    ctx.ellipse(x + w * 0.5 + 5, y + h + 4, w * 0.6, 9, 0, 0, TWO_PI);
     ctx.fill();
+
+    const stem = ctx.createLinearGradient(x + 6, y + 12, x + w - 6, y + h);
+    stem.addColorStop(0, "#fff0ca");
+    stem.addColorStop(0.5, "#c99565");
+    stem.addColorStop(1, "#765239");
+    ctx.fillStyle = stem;
+    roundedRect(x + 7, y + 13, w - 14, h - 12, 8);
+    ctx.fill();
+
+    ctx.shadowColor = "rgba(255, 94, 112, 0.35)";
+    ctx.shadowBlur = 12;
+    const cap = ctx.createLinearGradient(x - 6, y - 2, x + w + 6, y + 28);
+    cap.addColorStop(0, "#ff8a7a");
+    cap.addColorStop(0.5, "#cb4054");
+    cap.addColorStop(1, "#82304b");
+    ctx.fillStyle = cap;
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 23);
+    ctx.bezierCurveTo(x - 3, y + 2, x + w * 0.26, y - 7, x + w * 0.5, y - 4);
+    ctx.bezierCurveTo(x + w * 0.76, y - 8, x + w + 7, y + 2, x + w + 8, y + 23);
+    ctx.quadraticCurveTo(x + w * 0.5, y + 34, x - 8, y + 23);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "#ead6b8";
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.5, y + 24, w * 0.48, 9, 0, 0, TWO_PI);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(93, 60, 42, 0.24)";
+    ctx.lineWidth = 2;
+    for (let i = -2; i <= 2; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.5, y + 24);
+      ctx.lineTo(x + w * 0.5 + i * 8, y + 31);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "rgba(255, 246, 222, 0.86)";
+    ctx.beginPath();
+    ctx.arc(x + w * 0.27, y + 13, 5, 0, TWO_PI);
+    ctx.arc(x + w * 0.61, y + 9, 4, 0, TWO_PI);
+    ctx.arc(x + w * 0.75, y + 20, 3.5, 0, TWO_PI);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(24, 29, 33, 0.3)";
+    ctx.lineWidth = 3;
+    roundedRect(x + 7, y + 13, w - 14, h - 12, 8);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -718,19 +873,45 @@
     const x = obstacle.x;
     const y = obstacle.y;
     ctx.save();
-    ctx.fillStyle = "rgba(39, 49, 57, 0.18)";
+    ctx.fillStyle = "rgba(8, 18, 22, 0.28)";
     ctx.beginPath();
     ctx.ellipse(x + obstacle.w * 0.5, y + 14, obstacle.w * 0.55, 8, 0, 0, TWO_PI);
     ctx.fill();
-    ctx.fillStyle = "#7ee27b";
+
+    ctx.shadowColor = "rgba(118, 255, 192, 0.58)";
+    ctx.shadowBlur = 12;
+    const pad = ctx.createLinearGradient(x, y - 2, x, y + obstacle.h + 8);
+    pad.addColorStop(0, "#fff088");
+    pad.addColorStop(0.52, "#69ec9c");
+    pad.addColorStop(1, "#2a9b84");
+    ctx.fillStyle = pad;
     roundedRect(x, y, obstacle.w, obstacle.h, 7);
     ctx.fill();
-    ctx.fillStyle = "#fff4d6";
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = "#fff4d6";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(x + 12, y + 2);
-    ctx.lineTo(x + obstacle.w * 0.5, y - 18);
-    ctx.lineTo(x + obstacle.w - 12, y + 2);
+    ctx.moveTo(x + 13, y + 2);
+    ctx.lineTo(x + obstacle.w * 0.36, y - 16);
+    ctx.lineTo(x + obstacle.w * 0.55, y + 1);
+    ctx.lineTo(x + obstacle.w * 0.74, y - 16);
+    ctx.lineTo(x + obstacle.w - 10, y + 2);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+
+    ctx.fillStyle = "#d94259";
+    ctx.beginPath();
+    ctx.ellipse(x + obstacle.w * 0.5, y - 19, 18, 10, 0, Math.PI, TWO_PI);
+    ctx.lineTo(x + obstacle.w * 0.5 + 14, y - 17);
+    ctx.quadraticCurveTo(x + obstacle.w * 0.5, y - 7, x + obstacle.w * 0.5 - 14, y - 17);
     ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 246, 222, 0.84)";
+    ctx.beginPath();
+    ctx.arc(x + obstacle.w * 0.42, y - 19, 3, 0, TWO_PI);
+    ctx.arc(x + obstacle.w * 0.56, y - 22, 2.5, 0, TWO_PI);
     ctx.fill();
     ctx.restore();
   }
@@ -882,6 +1063,11 @@
   }
 
   function drawGround() {
+    if (state.phase === "dash") {
+      drawDashGround();
+      return;
+    }
+
     ctx.fillStyle = "#6da45e";
     ctx.fillRect(0, PLAY_H, W, GROUND_H);
     ctx.fillStyle = "#4d7a43";
@@ -891,6 +1077,115 @@
       roundedRect(x, PLAY_H + 22, 36, 10, 4);
       ctx.fill();
     }
+  }
+
+  function drawDashGround() {
+    const ground = ctx.createLinearGradient(0, PLAY_H, 0, H);
+    ground.addColorStop(0, "#24483f");
+    ground.addColorStop(0.42, "#182d34");
+    ground.addColorStop(1, "#10181f");
+    ctx.fillStyle = ground;
+    ctx.fillRect(0, PLAY_H, W, GROUND_H);
+
+    ctx.fillStyle = "rgba(255, 232, 139, 0.72)";
+    ctx.fillRect(0, PLAY_H, W, 5);
+    ctx.fillStyle = "rgba(95, 239, 191, 0.22)";
+    for (let x = -20 - ((state.time * state.speed * 0.45) % 74); x < W + 80; x += 74) {
+      roundedRect(x, PLAY_H + 20, 48, 9, 4);
+      ctx.fill();
+    }
+  }
+
+  function drawDashTrack() {
+    const top = PLAY_H - 86;
+    const bottom = PLAY_H + 8;
+    ctx.save();
+    const track = ctx.createLinearGradient(0, top, 0, bottom);
+    track.addColorStop(0, "rgba(29, 59, 61, 0.15)");
+    track.addColorStop(0.28, "rgba(30, 71, 67, 0.9)");
+    track.addColorStop(0.72, "rgba(17, 37, 44, 0.96)");
+    track.addColorStop(1, "rgba(12, 22, 29, 1)");
+    ctx.fillStyle = track;
+    ctx.beginPath();
+    ctx.moveTo(0, top + 22);
+    ctx.lineTo(W, top);
+    ctx.lineTo(W, bottom);
+    ctx.lineTo(0, bottom);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(108, 246, 201, 0.72)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, top + 22);
+    ctx.lineTo(W, top);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255, 232, 139, 0.78)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, dashGroundY() + 3);
+    ctx.lineTo(W, dashGroundY() - 13);
+    ctx.stroke();
+
+    const offset = (state.time * state.speed) % 68;
+    for (let x = -80 - offset; x < W + 100; x += 68) {
+      const alpha = 0.28 + ((Math.floor((x + offset) / 68) % 2) * 0.16);
+      ctx.fillStyle = `rgba(255, 244, 214, ${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(x, top + 38);
+      ctx.lineTo(x + 42, top + 34);
+      ctx.lineTo(x + 66, bottom);
+      ctx.lineTo(x + 22, bottom);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    if (state.dashFlash > 0) {
+      const p = state.player;
+      const radius = 130 * state.dashFlash + 34;
+      const glow = ctx.createRadialGradient(p.x, p.y, 6, p.x, p.y, radius);
+      glow.addColorStop(0, `rgba(255, 236, 126, ${0.45 * state.dashFlash})`);
+      glow.addColorStop(0.42, `rgba(95, 239, 191, ${0.24 * state.dashFlash})`);
+      glow.addColorStop(1, "rgba(95, 239, 191, 0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function drawDashCheckpointSign() {
+    if (!state.checkpointUnlocked) return;
+    const x = 48;
+    const y = PLAY_H - 142;
+    const pulse = 0.5 + Math.sin(state.time * 5) * 0.5;
+    ctx.save();
+    ctx.shadowColor = "rgba(255, 232, 139, 0.5)";
+    ctx.shadowBlur = 10 + pulse * 8;
+    ctx.strokeStyle = "#ffe88b";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 22);
+    ctx.lineTo(x, dashGroundY() + 4);
+    ctx.stroke();
+
+    const flag = ctx.createLinearGradient(x + 4, y, x + 102, y + 46);
+    flag.addColorStop(0, "#fff0a0");
+    flag.addColorStop(0.5, "#5feec1");
+    flag.addColorStop(1, "#2f97a0");
+    ctx.fillStyle = flag;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y + 22);
+    ctx.lineTo(x + 106, y + 10);
+    ctx.lineTo(x + 94, y + 54);
+    ctx.lineTo(x + 2, y + 48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#17303a";
+    ctx.font = "900 16px Inter, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("50", x + 54, y + 38);
+    ctx.restore();
   }
 
   function drawFeathers() {
@@ -1026,7 +1321,13 @@
     ctx.fillText(`Best ${state.best}`, W - 26, 25);
     ctx.fillStyle = "rgba(255, 244, 214, 0.78)";
     ctx.font = "700 12px Inter, system-ui, sans-serif";
-    ctx.fillText(state.phase === "dash" ? "Space / click to jump   P pause   R restart" : "Space / click to flap   P pause   R restart", W - 26, 43);
+    ctx.fillText(
+      state.phase === "dash"
+        ? "Checkpoint 50 saved   Space / click jump   R restart"
+        : "Space / click to flap   P pause   R restart",
+      W - 26,
+      43,
+    );
     ctx.restore();
   }
 
@@ -1075,7 +1376,10 @@
     ctx.fillStyle = "rgba(255, 244, 214, 0.88)";
     ctx.font = "700 18px Inter, system-ui, sans-serif";
     ctx.fillText(`${state.message}  Best ${state.best}`, W / 2, 286);
-    drawButton(W / 2 - 104, 326, 208, 54, "Try Again");
+    ctx.fillStyle = state.checkpointUnlocked ? "#9ee68c" : "rgba(255, 244, 214, 0.72)";
+    ctx.font = "800 16px Inter, system-ui, sans-serif";
+    ctx.fillText(state.checkpointUnlocked ? "Checkpoint saved: restart at Chicken Dash." : "Reach 50 to save the Dash checkpoint.", W / 2, 318);
+    drawButton(W / 2 - 112, 350, 224, 54, state.checkpointUnlocked ? "Restart Dash" : "Try Again");
     ctx.restore();
   }
 
@@ -1122,6 +1426,8 @@
           : "tap to flap through mushroom gaps; score 50 unlocks Chicken Dash mode",
       score: state.score,
       best: state.best,
+      checkpointUnlocked: state.checkpointUnlocked,
+      checkpointScore: state.checkpointUnlocked ? DASH_START_SCORE : null,
       difficulty: { level: difficultyLevel(), label: difficultyLabel() },
       speed: Math.round(state.speed),
       gapForgiveness: Number(gapForgiveness().toFixed(1)),
