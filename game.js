@@ -14,6 +14,7 @@
 
   const keysDown = new Set();
   const once = new Set();
+  let audioCtx = null;
 
   const state = {
     mode: "title",
@@ -33,8 +34,12 @@
     dashTrailTimer: 0,
     dashGravitySign: 1,
     dashBuildGravity: 1,
+    lastFlapLevel: 1,
+    lastDashLevel: 1,
     message: "",
-    checkpointUnlocked: false,
+    newBest: false,
+    muted: false,
+    checkpointUnlocked: readCheckpointUnlocked(),
     player: makePlayer(),
     obstacles: [],
     dashObstacles: [],
@@ -43,6 +48,7 @@
     dashTrails: [],
     feathers: [],
     hearts: [],
+    popups: [],
     clouds: [],
   };
 
@@ -65,11 +71,19 @@
     return Number.isFinite(value) ? value : 0;
   }
 
+  function readCheckpointUnlocked() {
+    return window.localStorage?.getItem("chicken-flap-checkpoint") === "1" || readBestScore() >= DASH_START_SCORE;
+  }
+
   function saveBestScore() {
     if (state.score > state.best) {
       state.best = state.score;
       window.localStorage?.setItem("chicken-flap-best", String(state.best));
+      state.newBest = true;
+      return true;
     }
+    state.newBest = false;
+    return false;
   }
 
   function resetGame() {
@@ -90,7 +104,10 @@
     state.dashTrailTimer = 0;
     state.dashGravitySign = 1;
     state.dashBuildGravity = 1;
+    state.lastFlapLevel = 1;
+    state.lastDashLevel = 1;
     state.message = useCheckpoint ? "Checkpoint 50" : "";
+    state.newBest = false;
     state.player = makePlayer();
     state.obstacles.length = 0;
     state.dashObstacles.length = 0;
@@ -99,6 +116,7 @@
     state.dashTrails.length = 0;
     state.feathers.length = 0;
     state.hearts.length = 0;
+    state.popups.length = 0;
     state.clouds = makeClouds();
     if (useCheckpoint) {
       startDashMode({ fromCheckpoint: true });
@@ -183,6 +201,7 @@
   }
 
   function flap() {
+    unlockAudio();
     if (state.mode === "title") {
       resetGame();
       if (state.phase === "dash") jumpDash();
@@ -205,6 +224,7 @@
     state.player.flapPulse = 0.2;
     addFeathers(state.player.x - 12, state.player.y + 10, 7, 100);
     addHeart(state.player.x - 26, state.player.y - 18);
+    playSound("flap");
   }
 
   function jumpDash() {
@@ -227,8 +247,10 @@
       state.dashCoyote = 0;
       state.dashFlash = Math.max(state.dashFlash, 0.5);
       state.message = "orb!";
+      addPopup("ORB", obstacle.x, obstacle.y - 26 * state.dashGravitySign, "#facc15", 20, 0.7);
       addFeathers(obstacle.x, obstacle.y, 18, 160);
       addDashTrail(player.x - 24, player.y + 4, 0.38, 26);
+      playSound("orb");
       return true;
     }
     return false;
@@ -246,6 +268,7 @@
     addFeathers(player.x - 8, player.y + player.r, 12, 130);
     addHeart(player.x - 24, player.y - 22);
     addDashTrail(player.x - 20, player.y + 8, 0.28, 20);
+    playSound("jump");
     return true;
   }
 
@@ -276,6 +299,7 @@
     if (state.phase === "dash" && !options.fromCheckpoint) return;
     state.phase = "dash";
     state.checkpointUnlocked = true;
+    window.localStorage?.setItem("chicken-flap-checkpoint", "1");
     state.message = options.fromCheckpoint ? "Checkpoint 50" : "Checkpoint saved!";
     state.dashFlash = options.fromCheckpoint ? 0.9 : 1.2;
     state.obstacles.length = 0;
@@ -295,10 +319,13 @@
     state.dashTrailTimer = 0;
     state.dashGravitySign = 1;
     state.dashBuildGravity = 1;
+    state.lastDashLevel = dashLevel();
     state.dashTrails.length = 0;
     addDashPlatform(-120, dashGroundY(), W + 520, 34, 1);
     addFeathers(state.player.x, state.player.y, 36, 210);
     addHeart(state.player.x - 26, state.player.y - 28);
+    addPopup(options.fromCheckpoint ? "CHECKPOINT 50" : "CHICKEN DASH", state.player.x + 62, state.player.y - 44, "#facc15", 24, 1.1);
+    playSound(options.fromCheckpoint ? "checkpoint" : "dash");
     spawnDashPattern(W + 520);
     spawnDashPattern(W + 920);
   }
@@ -445,6 +472,21 @@
     });
   }
 
+  function addPopup(text, x, y, color = "#facc15", size = 20, life = 0.75) {
+    state.popups.push({
+      text,
+      x,
+      y,
+      vx: -18 - seededRandom() * 20,
+      vy: -44 - seededRandom() * 18,
+      color,
+      size,
+      life,
+      maxLife: life,
+    });
+    if (state.popups.length > 16) state.popups.splice(0, state.popups.length - 16);
+  }
+
   function update(dt) {
     if (state.mode === "title") {
       state.time += dt;
@@ -452,12 +494,14 @@
       updateClouds(dt, 26);
       updateFeathers(dt);
       updateHearts(dt);
+      updatePopups(dt);
       return;
     }
 
     if (state.mode === "paused") {
       updateFeathers(dt);
       updateHearts(dt);
+      updatePopups(dt);
       return;
     }
 
@@ -468,6 +512,7 @@
       updateClouds(dt, 26);
       updateFeathers(dt);
       updateHearts(dt);
+      updatePopups(dt);
       return;
     }
 
@@ -491,6 +536,7 @@
     updateObstacles(dt);
     updateFeathers(dt);
     updateHearts(dt);
+    updatePopups(dt);
     checkCollisions();
   }
 
@@ -533,6 +579,7 @@
     updateDashTrails(dt);
     updateFeathers(dt);
     updateHearts(dt);
+    updatePopups(dt);
   }
 
   function updateDashObstacles(dt) {
@@ -550,9 +597,12 @@
         if (obstacle.type === "spike") {
           state.score += 1;
           state.dashStreak += 1;
+          maybeShowDashLevelUp();
           state.message = state.dashStreak >= 5 ? `${state.dashStreak} streak` : "+1 dash";
+          addPopup(state.dashStreak >= 5 ? `${state.dashStreak} STREAK` : "+1", state.player.x + 58, state.player.y - 34, "#facc15", 18, 0.65);
           addFeathers(state.player.x - 10, state.player.y + 8, 5, 85);
           addDashTrail(state.player.x - 24, state.player.y + 6, 0.32, 24);
+          playSound("score");
         }
       }
       if (obstacle.x + obstacle.w < -40) state.dashObstacles.splice(i, 1);
@@ -651,7 +701,10 @@
         obstacle.passed = true;
         state.score += 1;
         state.message = "+1";
+        maybeShowFlapLevelUp();
+        addPopup("+1", state.player.x + 46, state.player.y - 28, "#facc15", 20, 0.65);
         addFeathers(state.player.x - 8, state.player.y, 5, 70);
+        playSound("score");
         if (state.score >= DASH_START_SCORE) {
           startDashMode();
           return;
@@ -688,6 +741,17 @@
     }
   }
 
+  function updatePopups(dt) {
+    for (let i = state.popups.length - 1; i >= 0; i -= 1) {
+      const popup = state.popups[i];
+      popup.x += popup.vx * dt;
+      popup.y += popup.vy * dt;
+      popup.vy += 36 * dt;
+      popup.life -= dt;
+      if (popup.life <= 0) state.popups.splice(i, 1);
+    }
+  }
+
   function checkCollisions() {
     const player = state.player;
     if (player.y - player.r < 58) {
@@ -718,7 +782,10 @@
           obstacle.bonus.collected = true;
           state.score += 2;
           state.message = "+2 corn";
+          maybeShowFlapLevelUp();
+          addPopup("+2 CORN", obstacle.bonus.x, obstacle.bonus.y - 18, "#facc15", 19, 0.75);
           addFeathers(obstacle.bonus.x, obstacle.bonus.y, 11, 110);
+          playSound("bonus");
           if (state.score >= DASH_START_SCORE) {
             startDashMode();
             return;
@@ -748,8 +815,10 @@
           state.dashCoyote = 0;
           state.message = "bounce!";
           state.dashFlash = Math.max(state.dashFlash, 0.45);
+          addPopup("BOUNCE", obstacle.x + obstacle.w * 0.5, obstacle.y - 26 * obstacle.gravity, "#22c55e", 20, 0.7);
           addFeathers(obstacle.x + obstacle.w * 0.5, obstacle.y, 16, 150);
           addDashTrail(player.x - 22, player.y + 4, 0.36, 26);
+          playSound("pad");
         }
         continue;
       }
@@ -773,10 +842,30 @@
           state.dashCoyote = 0.08;
           state.dashFlash = Math.max(state.dashFlash, 0.75);
           state.message = state.dashGravitySign === 1 ? "floor portal!" : "ceiling portal!";
+          addPopup(state.dashGravitySign === 1 ? "FLOOR" : "CEILING", player.x + 30, player.y - 42, "#38bdf8", 18, 0.8);
           addFeathers(player.x, player.y, 26, 190);
+          playSound("portal");
         }
       }
     }
+  }
+
+  function maybeShowFlapLevelUp() {
+    if (state.phase !== "flap" || state.score >= DASH_START_SCORE) return;
+    const level = difficultyLevel();
+    if (level <= state.lastFlapLevel) return;
+    state.lastFlapLevel = level;
+    addPopup(`LEVEL ${level}`, W / 2, 104, "#9ee68c", 24, 0.95);
+    playSound("checkpoint");
+  }
+
+  function maybeShowDashLevelUp() {
+    if (state.phase !== "dash") return;
+    const level = dashLevel();
+    if (level <= state.lastDashLevel) return;
+    state.lastDashLevel = level;
+    addPopup(`DASH ${level}`, W / 2, 104, "#38bdf8", 24, 0.95);
+    playSound("checkpoint");
   }
 
   function circleRect(cx, cy, r, rect) {
@@ -797,8 +886,10 @@
     state.player.alive = false;
     state.player.vy = 0;
     state.shake = 0.28;
+    addPopup("CRASH", state.player.x + 20, state.player.y - 28, "#fb7185", 24, 0.85);
     addFeathers(state.player.x, state.player.y, 28, 170);
     saveBestScore();
+    playSound("crash");
   }
 
   function togglePause() {
@@ -812,6 +903,87 @@
     } else {
       document.exitFullscreen?.();
     }
+  }
+
+  function toggleMute() {
+    state.muted = !state.muted;
+    if (!state.muted) playSound("score");
+    addPopup(state.muted ? "SOUND OFF" : "SOUND ON", W - 124, 88, state.muted ? "#cbd5e1" : "#facc15", 16, 0.8);
+  }
+
+  function unlockAudio() {
+    if (state.muted) return;
+    if (audioCtx) {
+      audioCtx.resume?.();
+      return;
+    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    audioCtx = new AudioContextClass();
+  }
+
+  function playSound(kind) {
+    if (state.muted) return;
+    unlockAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const sounds = {
+      flap: [
+        [440, 0.055, "triangle", 0],
+        [640, 0.08, "sine", 0.045],
+      ],
+      jump: [
+        [360, 0.06, "square", 0],
+        [720, 0.09, "triangle", 0.05],
+      ],
+      score: [[880, 0.07, "sine", 0]],
+      bonus: [
+        [660, 0.06, "sine", 0],
+        [990, 0.08, "sine", 0.06],
+      ],
+      pad: [
+        [520, 0.07, "triangle", 0],
+        [1040, 0.12, "sine", 0.07],
+      ],
+      orb: [
+        [760, 0.05, "sine", 0],
+        [1280, 0.1, "triangle", 0.045],
+      ],
+      portal: [
+        [330, 0.09, "sawtooth", 0],
+        [660, 0.14, "triangle", 0.055],
+      ],
+      checkpoint: [
+        [520, 0.08, "sine", 0],
+        [780, 0.1, "sine", 0.075],
+      ],
+      dash: [
+        [392, 0.08, "triangle", 0],
+        [784, 0.12, "triangle", 0.07],
+        [1176, 0.16, "sine", 0.14],
+      ],
+      crash: [
+        [160, 0.12, "sawtooth", 0],
+        [90, 0.18, "square", 0.08],
+      ],
+    };
+    for (const [freq, duration, type, delay] of sounds[kind] || []) {
+      playTone(freq, duration, type, now + delay);
+    }
+  }
+
+  function playTone(freq, duration, type, startTime) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.05, startTime + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(startTime);
+    osc.stop(startTime + duration + 0.02);
   }
 
   function render() {
@@ -837,7 +1009,8 @@
     drawFeathers();
     drawHearts();
     if (state.mode !== "title") drawChicken();
-    drawHud();
+    drawPopups();
+    if (state.mode !== "title") drawHud();
 
     if (state.mode === "title") drawTitle();
     if (state.mode === "paused") drawPause();
@@ -1602,6 +1775,22 @@
     }
   }
 
+  function drawPopups() {
+    for (const popup of state.popups) {
+      const alpha = clamp(popup.life / popup.maxLife, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.textAlign = "center";
+      ctx.font = `900 ${popup.size}px Inter, system-ui, sans-serif`;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.82)";
+      ctx.strokeText(popup.text, popup.x, popup.y);
+      ctx.fillStyle = popup.color;
+      ctx.fillText(popup.text, popup.x, popup.y);
+      ctx.restore();
+    }
+  }
+
   function drawFeathers() {
     for (const f of state.feathers) {
       ctx.save();
@@ -1753,6 +1942,7 @@
     ctx.fillStyle = "#f7d35c";
     ctx.font = "800 12px Inter, system-ui, sans-serif";
     ctx.fillText("- For My Sexy Girlfriend Ella", 22, 42);
+    drawHudMeter();
 
     ctx.textAlign = "center";
     ctx.font = "900 32px Inter, system-ui, sans-serif";
@@ -1770,31 +1960,160 @@
     ctx.font = "700 12px Inter, system-ui, sans-serif";
     ctx.fillText(
       state.phase === "dash"
-        ? `Checkpoint 50   Streak ${state.dashStreak}   Space / click jump`
-        : "Space / click to flap   P pause   R restart",
+        ? `Checkpoint 50   Streak ${state.dashStreak}   M ${state.muted ? "sound off" : "sound on"}`
+        : `Space / click to flap   P pause   R restart   M ${state.muted ? "sound off" : "sound on"}`,
       W - 26,
       43,
     );
     ctx.restore();
   }
 
+  function drawHudMeter() {
+    const x = 22;
+    const y = 48;
+    const w = 178;
+    const h = 6;
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 244, 214, 0.18)";
+    roundedRect(x, y, w, h, 3);
+    ctx.fill();
+    const pct = state.phase === "dash" ? 1 : clamp(state.score / DASH_START_SCORE, 0, 1);
+    const grad = ctx.createLinearGradient(x, y, x + w, y);
+    grad.addColorStop(0, "#facc15");
+    grad.addColorStop(0.54, "#22c55e");
+    grad.addColorStop(1, "#38bdf8");
+    ctx.fillStyle = grad;
+    roundedRect(x, y, Math.max(6, w * pct), h, 3);
+    ctx.fill();
+    ctx.fillStyle = state.phase === "dash" ? "#38bdf8" : "rgba(255, 244, 214, 0.74)";
+    ctx.font = "800 10px Inter, system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(state.phase === "dash" ? "Dash checkpoint active" : `Dash in ${Math.max(0, DASH_START_SCORE - state.score)}`, x + w + 8, y + 6);
+    ctx.restore();
+  }
+
   function drawTitle() {
-    drawOverlay(0.45);
+    drawOverlay(0.34);
+    drawTitlePreview();
     ctx.save();
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff4d6";
-    ctx.font = "900 56px Inter, system-ui, sans-serif";
-    ctx.fillText("Chicken Flap", W / 2, 150);
+    ctx.font = "900 60px Inter, system-ui, sans-serif";
+    ctx.fillText("Chicken Flap", W / 2, 118);
     ctx.fillStyle = "#f7d35c";
     ctx.font = "900 28px Inter, system-ui, sans-serif";
-    ctx.fillText("- For My Sexy Girlfriend Ella", W / 2, 190);
+    ctx.fillText("- For My Sexy Girlfriend Ella", W / 2, 154);
     ctx.fillStyle = "rgba(255, 244, 214, 0.92)";
     ctx.font = "700 20px Inter, system-ui, sans-serif";
-    ctx.fillText("Flap through mushroom gaps. At 50, it becomes Chicken Dash.", W / 2, 245);
-    drawButton(W / 2 - 120, 292, 240, 58, "Start Flapping");
+    ctx.fillText("Flap to 50, save the checkpoint, then survive Chicken Dash.", W / 2, 202);
+    drawButton(W / 2 - 130, 236, 260, 58, state.checkpointUnlocked ? "Start At Dash" : "Start Flapping");
     ctx.fillStyle = "rgba(255, 244, 214, 0.82)";
     ctx.font = "700 16px Inter, system-ui, sans-serif";
-    ctx.fillText("Space, click, or tap to flap. After 50, tap to jump.", W / 2, 392);
+    ctx.fillText("Space, click, or tap. P pauses. M toggles sound.", W / 2, 314);
+    ctx.fillStyle = "#9ee68c";
+    ctx.font = "900 13px Inter, system-ui, sans-serif";
+    ctx.fillText(`Best ${state.best}${state.checkpointUnlocked ? "  -  Dash checkpoint saved" : ""}`, W / 2, 452);
+    ctx.restore();
+  }
+
+  function drawTitlePreview() {
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    drawPreviewPanel(118, 328, "FLAP", "#facc15");
+    drawPreviewPanel(572, 328, "DASH", "#38bdf8");
+    drawMushroomColumn(158, 54, 348, 78, false, 0);
+    drawMushroomColumn(250, 54, 286, 78, true, 0);
+    drawCorn(334, 386);
+    drawPreviewChicken(410, 388, 0.92);
+
+    drawPreviewPlatform(622, 404, 156);
+    drawPreviewPlatform(805, 370, 118);
+    drawPreviewSpike(716, 404);
+    drawPreviewOrb(792, 354);
+    drawPreviewChicken(620, 374, 0.84);
+    ctx.restore();
+  }
+
+  function drawPreviewPanel(x, y, label, color) {
+    ctx.fillStyle = "rgba(15, 23, 42, 0.62)";
+    roundedRect(x, y, 328, 106, 8);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    roundedRect(x + 1, y + 1, 326, 104, 8);
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.font = "900 13px Inter, system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(label, x + 16, y + 24);
+  }
+
+  function drawPreviewPlatform(x, y, w) {
+    const grad = ctx.createLinearGradient(x, y - 24, x, y + 8);
+    grad.addColorStop(0, "#e0f2fe");
+    grad.addColorStop(0.25, "#38bdf8");
+    grad.addColorStop(1, "#0f172a");
+    ctx.fillStyle = grad;
+    roundedRect(x, y, w, 28, 4);
+    ctx.fill();
+    ctx.strokeStyle = "#f8fafc";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y);
+    ctx.stroke();
+  }
+
+  function drawPreviewSpike(x, y) {
+    ctx.fillStyle = "#e11d48";
+    ctx.beginPath();
+    ctx.moveTo(x + 17, y - 40);
+    ctx.lineTo(x + 34, y);
+    ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#fff4d6";
+    ctx.beginPath();
+    ctx.arc(x + 15, y - 15, 4, 0, TWO_PI);
+    ctx.fill();
+  }
+
+  function drawPreviewOrb(x, y) {
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, TWO_PI);
+    ctx.stroke();
+    ctx.fillStyle = "#22c55e";
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, TWO_PI);
+    ctx.fill();
+  }
+
+  function drawPreviewChicken(x, y, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    ctx.fillStyle = "#fff7df";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 24, 21, 0, 0, TWO_PI);
+    ctx.fill();
+    ctx.fillStyle = "#c83d36";
+    ctx.beginPath();
+    ctx.arc(-5, -20, 6, 0, TWO_PI);
+    ctx.arc(4, -24, 5, 0, TWO_PI);
+    ctx.fill();
+    ctx.fillStyle = "#efaa31";
+    ctx.beginPath();
+    ctx.moveTo(18, -3);
+    ctx.lineTo(31, -8);
+    ctx.lineTo(31, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#273139";
+    ctx.beginPath();
+    ctx.arc(8, -8, 4, 0, TWO_PI);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1811,22 +2130,49 @@
   }
 
   function drawGameOver() {
-    drawOverlay(0.48);
+    drawOverlay(0.5);
+    drawResultBurst(W / 2, 174);
     ctx.save();
     ctx.textAlign = "center";
-    ctx.fillStyle = "#fff4d6";
-    ctx.font = "900 48px Inter, system-ui, sans-serif";
-    ctx.fillText("Mushroom Crash", W / 2, 200);
+    ctx.fillStyle = state.newBest ? "#facc15" : "#fff4d6";
+    ctx.font = "900 50px Inter, system-ui, sans-serif";
+    ctx.fillText(state.newBest ? "New Best!" : state.phase === "dash" ? "Dash Wipeout" : "Mushroom Crash", W / 2, 176);
     ctx.fillStyle = "#f7d35c";
-    ctx.font = "900 28px Inter, system-ui, sans-serif";
-    ctx.fillText(`Score ${state.score}`, W / 2, 248);
+    ctx.font = "900 32px Inter, system-ui, sans-serif";
+    ctx.fillText(`Score ${state.score}`, W / 2, 228);
     ctx.fillStyle = "rgba(255, 244, 214, 0.88)";
     ctx.font = "700 18px Inter, system-ui, sans-serif";
-    ctx.fillText(`${state.message}  Best ${state.best}`, W / 2, 286);
+    ctx.fillText(`${state.message}  Best ${state.best}`, W / 2, 268);
     ctx.fillStyle = state.checkpointUnlocked ? "#9ee68c" : "rgba(255, 244, 214, 0.72)";
     ctx.font = "800 16px Inter, system-ui, sans-serif";
-    ctx.fillText(state.checkpointUnlocked ? "Checkpoint saved: restart at Chicken Dash." : "Reach 50 to save the Dash checkpoint.", W / 2, 318);
-    drawButton(W / 2 - 112, 350, 224, 54, state.checkpointUnlocked ? "Restart Dash" : "Try Again");
+    ctx.fillText(state.checkpointUnlocked ? "Checkpoint saved: restart at Chicken Dash." : "Reach 50 to save the Dash checkpoint.", W / 2, 304);
+    if (state.phase === "dash") {
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "900 14px Inter, system-ui, sans-serif";
+      ctx.fillText(`Dash streak ${state.dashStreak}`, W / 2, 332);
+    }
+    drawButton(W / 2 - 116, 362, 232, 56, state.checkpointUnlocked ? "Restart Dash" : "Try Again");
+    ctx.fillStyle = "rgba(255, 244, 214, 0.74)";
+    ctx.font = "700 14px Inter, system-ui, sans-serif";
+    ctx.fillText("Space, click, or tap to run it back.", W / 2, 442);
+    ctx.restore();
+  }
+
+  function drawResultBurst(x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha = 0.75;
+    ctx.strokeStyle = state.newBest ? "rgba(250, 204, 21, 0.75)" : "rgba(251, 113, 133, 0.55)";
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 16; i += 1) {
+      const a = (i / 16) * TWO_PI + state.time * 0.35;
+      const inner = 76 + Math.sin(state.time * 4 + i) * 5;
+      const outer = inner + 24;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
+      ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -1876,6 +2222,8 @@
       best: state.best,
       checkpointUnlocked: state.checkpointUnlocked,
       checkpointScore: state.checkpointUnlocked ? DASH_START_SCORE : null,
+      muted: state.muted,
+      newBest: state.newBest,
       difficulty: { level: state.phase === "dash" ? dashLevel() : difficultyLevel(), label: difficultyLabel() },
       dashStreak: state.dashStreak,
       dashJumpBuffer: Number(state.dashJumpBuffer.toFixed(2)),
@@ -1936,6 +2284,7 @@
       dashObstaclesVisible: state.dashObstacles.length,
       dashPlatformsVisible: state.dashPlatforms.length,
       dashTrailsVisible: state.dashTrails.length,
+      popupsVisible: state.popups.length,
       message: state.message,
     };
     return JSON.stringify(payload);
@@ -1959,6 +2308,7 @@
     if (key === "enter" && state.mode !== "playing") resetGame();
     if (key === "r") resetGame();
     if (key === "p") togglePause();
+    if (key === "m") toggleMute();
     if (key === "f") toggleFullscreen();
   }
 
